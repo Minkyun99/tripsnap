@@ -1,0 +1,57 @@
+{% load socialaccount %}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>트립스냅 홈</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        /* 카카오 버튼 아이콘 스타일링을 위한 커스텀 클래스 */
+        .kakao-icon {
+            width: 16px; 
+            height: 16px; 
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-white rounded-xl shadow-2xl p-10 space-y-6 text-center">
+        <h1 class="text-4xl font-extrabold text-indigo-600">
+            환영합니다!
+        </h1>
+        <p class="text-xl text-gray-700">
+            {% if request.user.is_authenticated %}
+                <span class="font-semibold text-indigo-700">{{ request.user.email|default:"사용자" }}</span>님, 로그인에 성공했습니다.
+            {% else %}
+                메인 페이지입니다. 지금 소셜 로그인을 시작하세요.
+            {% endif %}
+        </p>
+        
+        <div class="mt-8 space-y-4 md:space-x-4 md:space-y-0">
+            {% if request.user.is_authenticated %}
+                <a href="/users/profile/" class="inline-flex items-center justify-center px-6 py-3 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition shadow-md">
+                    내 프로필 보기
+                </a>
+                
+                <a href="{% url 'account_logout' %}" class="inline-flex items-center justify-center px-6 py-3 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition shadow-md">
+                    로그아웃
+                </a>
+            {% else %}
+                <!-- 💡 핵심 수정 부분: provider_login_url 사용 -->
+                <a href="{% provider_login_url 'kakao' %}" class="inline-flex items-center justify-center px-6 py-3 bg-[#FEE500] text-[#3C1E1E] font-bold rounded-lg hover:bg-[#FEEA46] transition shadow-lg w-full md:w-auto">
+                    <img src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_small.png" alt="카카오 로고" class="kakao-icon">
+                    카카오로 3초 로그인
+                </a>
+                
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
