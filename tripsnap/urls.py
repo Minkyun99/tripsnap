@@ -47,7 +47,7 @@ urlpatterns = [
     # ------------------------------------------------------------------------------------------
 
     # [4] chatbot 앱 URL
-    path('chatbot', include('chatbot.urls')),
+    path('chatbot/', include('chatbot.urls')),
 
 
 ]

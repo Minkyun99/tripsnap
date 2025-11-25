@@ -6,11 +6,17 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 """
 
 import os
+from environ import Env
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+env_path = BASE_DIR / '.env'
 
+env = Env()
+
+if env_path.is_file():
+    env.read_env(env_path, overwrite=True)
 
 # Quick-start development settings - unsuitable for production
 # SECURITY WARNING: keep the secret key used in production secret!
@@ -228,3 +234,6 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
+
+# openapi 환경변수 읽어오는 코드
+OPENAI_API_KEY = env.str("OPENAI_API_KEY", default=None)
