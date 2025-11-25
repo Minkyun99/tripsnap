@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     
     # 4. Local Apps (사용자 정의 앱)
     'users',
+    'chatbot',
 ]
 
 MIDDLEWARE = [
