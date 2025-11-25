@@ -25,6 +25,9 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    # ASGI 서버 앱 (가장 위에 있어야 함, 웹소켓 실행 엔진)
+    "daphne",
+
     # 0. Django 기본 내장 앱들 (필수)
     'django.contrib.admin',
     'django.contrib.auth',
@@ -88,7 +91,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'tripsnap.wsgi.application'
+# WSGI_APPLICATION = 'tripsnap.wsgi.application'
+ASGI_APPLICATION = 'tripsnap.asgi.application'  # WSGI를 ASGI 설정으로 변경(비동기 처리 가능)
 
 
 # Database
