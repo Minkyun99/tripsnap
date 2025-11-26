@@ -24,7 +24,10 @@ class User(AbstractUser):
     # [social] email (varchar, PK)
     # AbstractUser에 있는 email 필드를 오버라이드하여 unique=True로 설정
     email = models.EmailField(_("이메일 주소"), unique=True, null=False, blank=False)
-    
+
+    # nickname은 임의로 자동 할당되도록 페이지 구현 예정
+    # 모델에서는 null = True로 주고, 사용자가 가입할 당시에는 nickanme 란이 생길 수 있도록 함
+    nickname = models.CharField(max_length=30, unique=True, null=True, blank=True)
     REQUIRED_FIELDS = ['email']
 
     class Meta:
@@ -32,7 +35,7 @@ class User(AbstractUser):
         verbose_name_plural = _("사용자 목록")
 
     def __str__(self):
-        return self.username or self.email or "Unknown User"
+        return {self.username or self.email or "Unknown User", self.username}
 
 
 # --- 2. Profile Model (profile 테이블) ---

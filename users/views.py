@@ -1,6 +1,8 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth import logout # Django의 내장 로그아웃 함수 임포트
 from django.contrib import messages
+from .forms import CustomUserCreationForm
+from django.contrib.auth import login as auth_login
 
 # from django.contrib.auth.decorators import login_required # 인증이 필요하다면 주석 해제
 
@@ -40,3 +42,18 @@ def login(request):
     (실제 인증 처리는 allauth가 담당하며, 이 뷰는 템플릿만 보여줍니다.)
     """
     return render(request, 'user/login.html')
+
+def signup(request):
+    if request.user.is_authenticated:
+        return redirect('users:home')
+    if request.method == 'POST':
+      form = CustomUserCreationForm(request.POST)
+      if form.is_valid():
+          user = form.save()
+          user.backend = 'django.contrib.auth.backends.ModelBackend'
+          # 자동 로그인 되어 메인 페이지로 돌아감
+          auth_login(request, user)
+          return redirect('users:home')
+    else:
+        form = CustomUserCreationForm()
+    return render(request, 'user/signup.html', {'form':form})
