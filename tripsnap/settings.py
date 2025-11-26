@@ -9,10 +9,16 @@ import os
 import dotenv
 dotenv.load_dotenv()
 from pathlib import Path
+from environ import Env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+env_path = BASE_DIR / '.env'
 
+env = Env()
+
+if env_path.is_file():
+    env.read_env(env_path, overwrite=True)  # overwrite=True: 기존 환경변수를 덮어쓰는 옵션.
 
 # Quick-start development settings - unsuitable for production
 # SECURITY WARNING: keep the secret key used in production secret!
@@ -27,6 +33,9 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    # ASGI 서버 앱 (가장 위에 있어야 함, 웹소켓 실행 엔진)
+    "daphne",
+
     # 0. Django 기본 내장 앱들 (필수)
     'django.contrib.admin',
     'django.contrib.auth',
@@ -57,6 +66,7 @@ INSTALLED_APPS = [
     
     # 4. Local Apps (사용자 정의 앱)
     'users',
+    'chatbot',
 ]
 
 MIDDLEWARE = [
@@ -89,8 +99,17 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'tripsnap.wsgi.application'
-
+# WSGI_APPLICATION = 'tripsnap.wsgi.application'
+# Channels를 위한 ASGI 설정
+ASGI_APPLICATION = 'tripsnap.asgi.application'  # WSGI를 ASGI 설정으로 변경(비동기 처리 가능)
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 
 # Database
 DATABASES = {
@@ -228,3 +247,6 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
+
+# openapi 환경변수 읽어오는 코드
+OPENAI_API_KEY = env.str("OPENAI_API_KEY", default=None)
