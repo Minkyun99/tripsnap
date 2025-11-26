@@ -6,43 +6,45 @@
 # 해당 클래스 대한 설명: https://channels.readthedocs.io/en/latest/tutorial/part_2.html#enable-a-channel-layer
 import json
 
-from asgiref.sync import async_to_sync
-from channels.generic.websocket import WebsocketConsumer
+from channels.generic.websocket import AsyncWebsocketConsumer  # Django Channels가 제공하는 비동기 웹소켓 Consumer 기본 클래스.
+# connect/receive/disconnect 같은 비동기 메서드를 오버라이드해서 웹소켓 동작을 정의한다.
 
 
-class ChatConsumer(WebsocketConsumer):
+class ChatConsumer(AsyncWebsocketConsumer):
     # 클라이언트가 WebSocket을 통해 서버에 연결
-    def connect(self):
+    async def connect(self):
         self.room_name = self.scope["url_route"]["kwargs"]["room_name"]
-        self.room_group_name = f"chat_{self.room_name}"
+        self.room_group_name = f"chat_{self.room_name}"  # 같은 방에 있는 클라이언트들이 모두 이 그룹에 묶인다.
 
         # Join room group
-        async_to_sync(self.channel_layer.group_add)(
-            self.room_group_name, self.channel_name
-        )
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+        # group_add: 현재 연결 채널(self.channel_name)을 해당 그룹에 가입시킨다.
+        # channel_layer는 Redis 등 백엔드를 통해 서버 간 메시지 라우팅을 담당한다.
 
-        self.accept()
+        await self.accept()  # 웹소켓 핸드셰이크를 완료하고 연결을 수락한다.
 
     # 연결이 끊길 때
-    def disconnect(self, close_code):
+    async def disconnect(self, close_code):  # close_code는 연결 종료 사유 코드(WebSocket 표준)를 나타낸다.
         # Leave room group
-        async_to_sync(self.channel_layer.group_discard)(
-            self.room_group_name, self.channel_name
-        )
+        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        # group_discard: 현재 채널을 그룹에서 제거하여 더 이상 브로드캐스트 대상이 되지 않게 한다.
 
     # 클라이언트가 메시지를 보낼 때 실행되어 데이터를 처리
-    def receive(self, text_data):
-        text_data_json = json.loads(text_data)
-        message = text_data_json["message"]
+    async def receive(self, text_data):
+        text_data_json = json.loads(text_data)  # json.loads: 수신한 JSON 문자열을 파이썬 딕셔너리로 변환한다.
+        message = text_data_json["message"]  # message 추출: 클라이언트가 보낸 메시지 본문을 꺼낸다.
 
         # Send message to room group
-        async_to_sync(self.channel_layer.group_send)(
+        await self.channel_layer.group_send(
             self.room_group_name, {"type": "chat.message", "message": message}
+            # group_send: 같은 그룹(방)의 모든 채널에 이벤트를 브로드캐스트한다.
+            # 이벤트 딕셔너리의 "type" 필드는 이 Consumer에서 호출할 핸들러 메서드 이름을 지정한다.
+            # "chat.message" → chat_message 메서드가 호출된다(점(.)은 밑줄로 변환 규칙 적용).
         )
 
     # Receive message from room group
-    def chat_message(self, event):
-        message = event["message"]
+    async def chat_message(self, event):
+        message = event["message"]  # 브로드캐스트된 메시지 내용 추출
 
-        # Send message to WebSocket
-        self.send(text_data=json.dumps({"message": message}))
+        # Send message(JSON 문자열) to WebSocket
+        await self.send(text_data=json.dumps({"message": message}))
