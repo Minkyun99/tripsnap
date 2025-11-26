@@ -44,5 +44,10 @@ urlpatterns = [
     # [3] users 앱 URL
     path('users/', include('users.urls')),
 
+    # ------------------------------------------------------------------------------------------
+
+    # [4] chatbot 앱 URL
+    path('chatbot/', include('chatbot.urls')),
+
 
 ]
