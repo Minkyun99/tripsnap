@@ -6,6 +6,8 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 """
 
 import os
+import dotenv
+dotenv.load_dotenv()
 from pathlib import Path
 from environ import Env
 
@@ -20,7 +22,7 @@ if env_path.is_file():
 
 # Quick-start development settings - unsuitable for production
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env("DJANGO_SECRET_KEY")
+SECRET_KEY = os.environ.get("django_secret_key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -209,6 +211,9 @@ ACCOUNT_LOGOUT_REDIRECT_URL = '/'
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' 
 
 # 7. 소셜 로그인 설정
+kakao_clinet_id = os.environ.get("kakao_clinet_id")
+kakao_secret = os.environ.get("kakao_secret")
+
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'APP': {
@@ -222,8 +227,8 @@ SOCIALACCOUNT_PROVIDERS = {
     },
     'kakao': {
         'APP': {
-            'client_id': '', 
-            'secret': '',
+            'client_id': kakao_clinet_id, 
+            'secret': kakao_secret,
             'key': ''
         },
         'SCOPE': [
