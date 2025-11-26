@@ -6,8 +6,8 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 """
 
 import os
-from environ import Env
 from pathlib import Path
+from environ import Env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -16,11 +16,11 @@ env_path = BASE_DIR / '.env'
 env = Env()
 
 if env_path.is_file():
-    env.read_env(env_path, overwrite=True)
+    env.read_env(env_path, overwrite=True)  # overwrite=True: 기존 환경변수를 덮어쓰는 옵션.
 
 # Quick-start development settings - unsuitable for production
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-@e^z-v7r_j7t$8m-a%7w0w0s8#i-y!wz(y7&8t%v697s&6$r82'
+SECRET_KEY = env("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -98,6 +98,7 @@ TEMPLATES = [
 ]
 
 # WSGI_APPLICATION = 'tripsnap.wsgi.application'
+# Channels를 위한 ASGI 설정
 ASGI_APPLICATION = 'tripsnap.asgi.application'  # WSGI를 ASGI 설정으로 변경(비동기 처리 가능)
 
 
