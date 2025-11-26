@@ -100,7 +100,14 @@ TEMPLATES = [
 # WSGI_APPLICATION = 'tripsnap.wsgi.application'
 # Channels를 위한 ASGI 설정
 ASGI_APPLICATION = 'tripsnap.asgi.application'  # WSGI를 ASGI 설정으로 변경(비동기 처리 가능)
-
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 
 # Database
 DATABASES = {
