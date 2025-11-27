@@ -1,7 +1,9 @@
 # chatbot/rag_wrapper.py
-# bakery_rag.py를 수정하지 않고 코드를 보호
-# 싱글톤 관리 - 처음 한 번만 인스턴스 생성, 초기화 및 제어
-# 나중에 여기다가 캐싱, 로깅 등 추가 기능 추가하기 쉬움
+# RAGWrapper의 기능
+# 1. 싱글톤 관리 - 처음 한 번만 인스턴스 생성, 초기화 및 제어
+# 2. bakery_rag.py를 수정하지 않고 코드를 보호
+# 3. 나중에 여기다가 캐싱, 로깅 등 추가 기능 추가하기 쉬움
+# 4. 인터페이스 제공
 
 from .bakery_rag import BakeryRAGSystem
 

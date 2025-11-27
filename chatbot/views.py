@@ -29,4 +29,3 @@ def chat(request):
             'results': result['results']
         }
         return Response(context)
-
