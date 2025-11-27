@@ -72,15 +72,23 @@
                         <!-- 아바타 -->
                         <div class="flex-shrink-0 relative">
                             {% if user.profile.profile_img %}
-                                <img class="w-32 h-32 object-cover rounded-full ring-4 ring-white shadow-xl" 
+                                <img id="profileImage" class="w-32 h-32 object-cover rounded-full ring-4 ring-white shadow-xl cursor-pointer hover:opacity-80 transition-opacity" 
                                      src="{{ user.profile.profile_img.url }}" 
-                                     alt="{{ user.nickname }} 프로필 이미지">
+                                     alt="{{ user.nickname }} 프로필 이미지"
+                                     onclick="openImageUpload()">
                             {% else %}
-                                <div class="w-32 h-32 bg-white rounded-full ring-4 ring-white shadow-xl flex items-center justify-center text-6xl">
+                                <div id="profileImage" class="w-32 h-32 bg-white rounded-full ring-4 ring-white shadow-xl flex items-center justify-center text-6xl cursor-pointer hover:opacity-80 transition-opacity"
+                                     onclick="openImageUpload()">
                                     🍞
                                 </div>
                             {% endif %}
                             <span class="absolute bottom-2 right-2 block w-6 h-6 bg-green-400 border-4 border-white rounded-full"></span>
+                            <!-- 편집 아이콘 -->
+                            <button onclick="openImageUpload()" class="absolute top-0 right-0 bg-[#FF69B4] text-white p-2 rounded-full border-2 border-white shadow-lg hover:bg-[#FF1493] transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                </svg>
+                            </button>
                         </div>
                         
                         <!-- 사용자 정보 -->
@@ -236,5 +244,177 @@
         <div class="absolute text-5xl opacity-10" style="left: 15%; top: 70%; animation: float 7s ease-in-out infinite 2s;">🍩</div>
         <div class="absolute text-5xl opacity-10" style="left: 85%; top: 75%; animation: float 5.5s ease-in-out infinite 3s;">🥯</div>
     </div>
+
+    <!-- 이미지 업로드 모달 -->
+    <div id="imageUploadModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-[#D2691E] pixel-corners">
+            <div class="text-center mb-6">
+                <div class="text-6xl mb-4">📸</div>
+                <h2 class="text-3xl font-bold text-[#D2691E] mb-3">프로필 이미지 변경</h2>
+                <p class="text-[#8B4513]">새로운 프로필 이미지를 선택하세요</p>
+            </div>
+
+            <!-- 이미지 미리보기 -->
+            <div class="mb-6">
+                <div id="imagePreview" class="w-48 h-48 mx-auto bg-[#FFE8CC] rounded-full border-4 border-[#D2691E] flex items-center justify-center overflow-hidden">
+                    <span class="text-6xl">🍞</span>
+                </div>
+            </div>
+
+            <!-- 파일 입력 -->
+            <input type="file" id="imageInput" accept="image/*" class="hidden">
+            
+            <div class="flex gap-4">
+                <button onclick="document.getElementById('imageInput').click()" 
+                        class="flex-1 bg-[#FF69B4] text-white px-4 py-3 rounded-lg pixel-corners border-2 border-[#D2691E] hover:bg-[#FF1493] transition-all duration-300 font-bold">
+                    이미지 선택
+                </button>
+                <button onclick="uploadImage()" 
+                        id="uploadButton"
+                        class="flex-1 bg-green-500 text-white px-4 py-3 rounded-lg pixel-corners border-2 border-green-700 hover:bg-green-600 transition-all duration-300 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
+                    업로드
+                </button>
+            </div>
+
+            <button onclick="closeImageUpload()" 
+                    class="w-full mt-4 px-4 py-3 bg-white text-[#8B4513] font-bold rounded-lg pixel-corners border-2 border-[#D2691E] hover:bg-[#FFE8CC] transition-all duration-300">
+                취소
+            </button>
+
+            <!-- 로딩 인디케이터 -->
+            <div id="uploadLoading" class="hidden mt-4 text-center">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-[#FF69B4] border-t-transparent"></div>
+                <p class="text-[#8B4513] mt-2">업로드 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 알림 메시지 -->
+    <div id="alertMessage" class="hidden fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-[#FF69B4] text-white px-6 py-3 rounded-full pixel-corners border-2 border-[#D2691E] shadow-lg z-[100]">
+    </div>
+
+    <script>
+        let selectedImageData = null;
+
+        function openImageUpload() {
+            document.getElementById('imageUploadModal').classList.remove('hidden');
+        }
+
+        function closeImageUpload() {
+            document.getElementById('imageUploadModal').classList.add('hidden');
+            selectedImageData = null;
+            document.getElementById('imagePreview').innerHTML = '<span class="text-6xl">🍞</span>';
+            document.getElementById('uploadButton').disabled = true;
+        }
+
+        // 이미지 선택 시 미리보기
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // 파일 크기 체크 (5MB 제한)
+                if (file.size > 5 * 1024 * 1024) {
+                    showAlert('이미지 크기는 5MB 이하여야 합니다.', 'error');
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    selectedImageData = event.target.result;
+                    const preview = document.getElementById('imagePreview');
+                    preview.innerHTML = `<img src="${selectedImageData}" class="w-full h-full object-cover">`;
+                    document.getElementById('uploadButton').disabled = false;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // 이미지 업로드
+        async function uploadImage() {
+            if (!selectedImageData) {
+                showAlert('이미지를 선택해주세요.', 'error');
+                return;
+            }
+
+            const uploadButton = document.getElementById('uploadButton');
+            const loading = document.getElementById('uploadLoading');
+            
+            uploadButton.disabled = true;
+            loading.classList.remove('hidden');
+
+            try {
+                const response = await fetch('{% url "users:upload_profile_image" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({
+                        image: selectedImageData
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    
+                    // 프로필 이미지 업데이트
+                    const profileImg = document.getElementById('profileImage');
+                    if (profileImg.tagName === 'IMG') {
+                        profileImg.src = data.image_url + '?t=' + new Date().getTime();
+                    } else {
+                        // div를 img로 교체
+                        const newImg = document.createElement('img');
+                        newImg.id = 'profileImage';
+                        newImg.className = 'w-32 h-32 object-cover rounded-full ring-4 ring-white shadow-xl cursor-pointer hover:opacity-80 transition-opacity';
+                        newImg.src = data.image_url + '?t=' + new Date().getTime();
+                        newImg.alt = '프로필 이미지';
+                        newImg.onclick = openImageUpload;
+                        profileImg.parentNode.replaceChild(newImg, profileImg);
+                    }
+
+                    closeImageUpload();
+                } else {
+                    showAlert(data.error || '업로드 실패', 'error');
+                }
+            } catch (error) {
+                showAlert('업로드 중 오류가 발생했습니다.', 'error');
+                console.error('Upload error:', error);
+            } finally {
+                loading.classList.add('hidden');
+                uploadButton.disabled = false;
+            }
+        }
+
+        function showAlert(message, type = 'success') {
+            const alertDiv = document.getElementById('alertMessage');
+            alertDiv.textContent = message;
+            alertDiv.className = `fixed bottom-8 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full pixel-corners border-2 shadow-lg z-[100] ${
+                type === 'success' 
+                    ? 'bg-[#FF69B4] text-white border-[#D2691E]' 
+                    : 'bg-red-500 text-white border-red-700'
+            }`;
+            alertDiv.classList.remove('hidden');
+
+            setTimeout(() => {
+                alertDiv.classList.add('hidden');
+            }, 3000);
+        }
+
+        // ESC 키로 모달 닫기
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeImageUpload();
+            }
+        });
+
+        // 모달 외부 클릭시 닫기
+        document.getElementById('imageUploadModal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                closeImageUpload();
+            }
+        });
+    </script>
 </body>
 </html>

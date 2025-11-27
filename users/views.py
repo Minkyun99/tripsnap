@@ -8,6 +8,12 @@ from django.contrib.auth.decorators import login_required # 인증이 필요하�
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.http import require_POST
 from allauth.socialaccount.models import SocialAccount
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+import base64
+from django.core.files.base import ContentFile
+import uuid
 
 def home(request):
     """
@@ -121,3 +127,52 @@ def profile_view(request):
     }
     
     return render(request, 'users/profile.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def upload_profile_image(request):
+    """
+    프로필 이미지 업로드 처리
+    base64 인코딩된 이미지를 받아서 파일로 저장
+    """
+    try:
+        data = json.loads(request.body)
+        image_data = data.get('image')
+        
+        if not image_data:
+            return JsonResponse({'success': False, 'error': '이미지 데이터가 없습니다.'})
+        
+        # base64 데이터에서 헤더 제거 (data:image/png;base64, 부분)
+        if ',' in image_data:
+            format, imgstr = image_data.split(';base64,')
+            ext = format.split('/')[-1]  # png, jpg 등
+        else:
+            return JsonResponse({'success': False, 'error': '잘못된 이미지 형식입니다.'})
+        
+        # base64 디코딩
+        image_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4()}.{ext}')
+        
+        # Profile 객체 가져오기 또는 생성
+        try:
+            profile = request.user.profile
+        except:
+            from .models import Profile
+            profile = Profile.objects.create(user=request.user)
+        
+        # 기존 이미지 삭제
+        if profile.profile_img:
+            profile.profile_img.delete()
+        
+        # 새 이미지 저장
+        profile.profile_img = image_file
+        profile.save()
+        
+        return JsonResponse({
+            'success': True, 
+            'image_url': profile.profile_img.url,
+            'message': '프로필 이미지가 성공적으로 업데이트되었습니다!'
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
