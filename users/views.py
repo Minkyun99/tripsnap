@@ -3,8 +3,11 @@ from django.contrib.auth import logout # Django의 내장 로그아웃 함수 �
 from django.contrib import messages
 from .forms import CustomUserCreationForm
 from django.contrib.auth import login as auth_login
-
-# from django.contrib.auth.decorators import login_required # 인증이 필요하다면 주석 해제
+import random
+from django.contrib.auth.decorators import login_required # 인증이 필요하다면 주석 해제
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_POST
+from allauth.socialaccount.models import SocialAccount
 
 def home(request):
     """
@@ -44,6 +47,7 @@ def login(request):
     return render(request, 'user/login.html')
 
 def signup(request):
+
     if request.user.is_authenticated:
         return redirect('users:home')
     if request.method == 'POST':
@@ -57,3 +61,63 @@ def signup(request):
     else:
         form = CustomUserCreationForm()
     return render(request, 'user/signup.html', {'form':form})
+
+
+@login_required
+@require_http_methods(["POST"])
+def account_delete(request):
+    """
+    사용자 계정 탈퇴 처리
+    - 로그인된 사용자만 접근 가능
+    - POST 요청만 허용
+    - 소셜 계정 연결도 함께 삭제
+    """
+    user = request.user
+    
+    try:
+        # 1. 소셜 계정 연결 삭제 (카카오 등)
+        SocialAccount.objects.filter(user=user).delete()
+        
+        # 2. 로그아웃 처리 (세션 및 쿠키 삭제)
+        logout(request)
+        
+        # 3. 사용자 계정 삭제 (연관된 Profile도 CASCADE로 자동 삭제됨)
+        user.delete()
+        
+        messages.success(request, '계정이 성공적으로 탈퇴되었습니다.')
+        
+        # 4. 응답과 함께 쿠키 삭제
+        response = redirect('/')
+        response.delete_cookie('jwt-auth')
+        response.delete_cookie('jwt-refresh')
+        response.delete_cookie('sessionid')
+        response.delete_cookie('csrftoken')
+        
+        return response
+        
+    except Exception as e:
+        messages.error(request, f'탈퇴 처리 중 오류가 발생했습니다: {str(e)}')
+        return redirect('/')
+
+
+@login_required
+def profile_view(request):
+    """
+    사용자 프로필 페이지
+    User 모델의 모든 정보와 연결된 소셜 계정 정보를 표시
+    """
+    user = request.user
+    
+    # Profile 객체가 없으면 생성 (OneToOne 관계)
+    try:
+        profile = user.profile
+    except:
+        from .models import Profile
+        profile = Profile.objects.create(user=user)
+    
+    context = {
+        'user': user,
+        'profile': profile,
+    }
+    
+    return render(request, 'users/profile.html', context)
