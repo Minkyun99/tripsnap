@@ -9,7 +9,7 @@ import openai
 from tqdm import tqdm
 
 # ----------------- 0. 설정 -----------------
-DATA_FILE = "dessert_filtered_with_ratings.json"
+DATA_FILE = "dessert.json"
 VECTOR_DB_PATH = "./bakery_vectordb"
 COLLECTION_NAME = "bakery_collection"
 

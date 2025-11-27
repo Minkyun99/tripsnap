@@ -39,7 +39,7 @@ class RAGWrapper:
         llm_response = None
         if use_llm:
             llm_response = rag.generate_llm_response(
-                message, results, use_openai=False
+                message, results, use_openai=True
             )
         
         return {

@@ -1,50 +1,73 @@
-<!-- chat/templates/chat/room.html -->
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8"/>
-    <title>Chat Room</title>
+    <title>TripSnap 챗봇 테스트</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        #chat-log { height: 400px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        .message { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .user { background: #e3f2fd; text-align: right; }
+        .bot { background: #f5f5f5; }
+        input { width: 70%; padding: 10px; }
+        button { padding: 10px 20px; }
+    </style>
 </head>
 <body>
-    <textarea id="chat-log" cols="100" rows="20"></textarea><br>
-    <input id="chat-message-input" type="text" size="100"><br>
-    <input id="chat-message-submit" type="button" value="Send">
-    {{ room_name|json_script:"room-name" }}
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <h1>🍞 TripSnap 챗봇</h1>
+    <div id="chat-log"></div>
+    <input id="message-input" type="text" placeholder="메시지를 입력하세요...">
+    <button onclick="sendMessage()">전송</button>
+
     <script>
-        const roomName = JSON.parse(document.getElementById('room-name').textContent);
+        const chatLog = document.getElementById('chat-log')
+        const messageInput = document.getElementById('message-input')
 
-        const chatSocket = new WebSocket(
-            'ws://'
-            + window.location.host
-            + '/ws/chat/'
-            + roomName
-            + '/'
-        );
+        // csrf Token: https://jangsus1.tistory.com/2
+        axios.defaults.xsrfCookieName = 'csrftoken'
+        axios.defaults.xsrfHeaderName = 'X-CSRFTOKEN'
 
-        chatSocket.onmessage = function(e) {
-            const data = JSON.parse(e.data);
-            document.querySelector('#chat-log').value += (data.message + '\n');
-        };
+        async function sendMessage() {
+            const message = messageInput.value.trim()
+            if (!message) return;
 
-        chatSocket.onclose = function(e) {
-            console.error('Chat socket closed unexpectedly');
-        };
+            addMessage('나', message)
+            messageInput.value = ''
 
-        document.querySelector('#chat-message-input').focus();
-        document.querySelector('#chat-message-input').onkeyup = function(e) {
-            if (e.key === 'Enter') {  // enter, return
-                document.querySelector('#chat-message-submit').click();
+            try {
+                const response = await axios.post('/chatbot/chat/', {
+                    message: message
+                });
+
+                const data = response.data
+
+                if (data.llm_response) {
+                    addMessage('챗봇', data.llm_response)
+                }
+
+                if (data.results && data.results.length > 0) {
+                    let recs = '<br><b>추천 빵집:</b><br>'
+                    data.results.forEach((rec, i) => {
+                        recs += `${i+1}. ${rec.place_name}<br>`
+                    })
+                    addMessage('챗봇', recs)
+                }
+            } catch (error) {
+                addMessage('오류', error.message)
             }
-        };
-
-        document.querySelector('#chat-message-submit').onclick = function(e) {
-            const messageInputDom = document.querySelector('#chat-message-input');
-            const message = messageInputDom.value;
-            chatSocket.send(JSON.stringify({
-                'message': message
-            }));
-            messageInputDom.value = '';
-        };
+        }
+        
+        function addMessage(sender, text) {
+            const msgDiv = document.createElement('div')
+            msgDiv.className = 'message ' + (sender === '나' ? 'user' : 'bot')
+            msgDiv.innerHTML = `<b>${sender}:</b> ${text}`
+            chatLog.appendChild(msgDiv)
+            chatLog.scrollTop = chatLog.scrollHeight
+        }
+        
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        })
     </script>
 </body>
 </html>
