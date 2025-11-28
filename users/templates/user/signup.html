@@ -44,7 +44,7 @@
         <div class="space-y-4">
 
             <!-- 🚨 [재수정된 부분]: 절대 경로와 login/ 서브 경로를 명시합니다. -->
-            <a href="/accounts/kakao/login/" class="kakao-btn w-full py-3 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2">
+            <a href="{% provider_login_url 'kakao' method='oauth2' %}" class="kakao-btn w-full py-3 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2">
                 <!-- 카카오 아이콘 (예시 SVG) -->
                 <svg class="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 2C6.477 2 2 5.65 2 10c0 2.228 1.15 4.312 3.016 5.75L4 20l5.485-3.328C10.74 16.65 13.11 17 15.5 17c5.523 0 10-3.65 10-8S21.523 2 16 2H12z" fill="#000000"/>

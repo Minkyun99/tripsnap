@@ -16,6 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+from django.views.generic import TemplateView
 
 from users import views as users_views
 
@@ -23,7 +26,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # 메인페이지
-    path('', users_views.home, name='home'),
+    path('', TemplateView.as_view(template_name='home.html'), name='home'),
     
     # [1] dj-rest-auth 및 소셜 로그인 시작 URL
     path('api/auth/', include('dj_rest_auth.urls')),
@@ -42,7 +45,15 @@ urlpatterns = [
     path('accounts/', include('allauth.urls')), 
     
     # [3] users 앱 URL
-    path('users/', include('users.urls')),
+    path('users/', include('users.urls', namespace='users')),
 
+    # ------------------------------------------------------------------------------------------
+
+    # [4] chatbot 앱 URL
+    path('chatbot/', include('chatbot.urls')),
 
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

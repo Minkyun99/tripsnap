@@ -1,62 +1,45 @@
 """
 Django settings for tripsnap project.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/4.2/topics/settings/
 """
 
 import os
 import dotenv
 dotenv.load_dotenv()
 from pathlib import Path
+from environ import Env
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+env_path = BASE_DIR / '.env'
 
+env = Env()
 
-# Quick-start development settings - unsuitable for production
-# SECURITY WARNING: keep the secret key used in production secret!
+if env_path.is_file():
+    env.read_env(env_path, overwrite=True)
+
 SECRET_KEY = os.environ.get("django_secret_key")
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-
 ALLOWED_HOSTS = []
 
-
-# Application definition
-
 INSTALLED_APPS = [
-    # 0. Django 기본 내장 앱들 (필수)
+    "daphne",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    # 1. Allauth 필수 의존성 앱
     'django.contrib.sites',
-
-    # 2. Third-party Apps (서드파티 앱)
     'rest_framework',
     'rest_framework.authtoken',
-    
-    # Django Allauth 및 관련 앱
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-
-    # DRF + Allauth 연결 앱
     'dj_rest_auth',
-    'dj_rest_auth.registration', # 회원가입 기능을 사용하려면 필요
-
-    # 3. Social Providers (소셜 제공자별 앱)
+    'dj_rest_auth.registration',
     'allauth.socialaccount.providers.google', 
     'allauth.socialaccount.providers.kakao',
-    
-    # 4. Local Apps (사용자 정의 앱)
     'users',
+    'chatbot',
 ]
 
 MIDDLEWARE = [
@@ -67,7 +50,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    
     'allauth.account.middleware.AccountMiddleware',
 ]
 
@@ -81,7 +63,7 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
-                'django.template.context_processors.request', # allauth에 필수
+                'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -89,10 +71,16 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'tripsnap.wsgi.application'
+ASGI_APPLICATION = 'tripsnap.asgi.application'
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 
-
-# Database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -100,8 +88,6 @@ DATABASES = {
     }
 }
 
-
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -117,82 +103,70 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-# Internationalization
 LANGUAGE_CODE = 'ko-kr' 
-
 TIME_ZONE = 'Asia/Seoul' 
-
 USE_I18N = True
-
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
-# 개발 환경에서 정적 파일과 미디어 파일을 제공하기 위한 설정
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-
-# Media files (사용자 업로드 파일 - Profile 모델의 ImageField 관련)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
 # ===============================================
-# Custom & Third-party App Settings
+# Custom User Model
 # ===============================================
-
-# 1. Custom User Model 등록 (필수)
-# users 앱의 User 모델을 기본 인증 모델로 사용하도록 설정
 AUTH_USER_MODEL = 'users.User' 
-
-# 2. Allauth 필수 의존성: SITE_ID 설정
 SITE_ID = 1
 
-# 3. DRF/AUTH 설정
+# ===============================================
+# DRF 설정
+# ===============================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',
-        # JWT를 사용하려면 아래 설정을 추가합니다.
         'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
     )
 }
 
-# 4. DJ-REST-AUTH 설정
+# ===============================================
+# DJ-REST-AUTH 설정
+# ===============================================
 REST_AUTH = {
     'USE_JWT': True, 
-    'JWT_AUTH_COOKIE': 'jwt-auth', # JWT 쿠키 이름 설정
-    'JWT_AUTH_REFRESH_COOKIE': 'jwt-refresh', # JWT 리프레시 쿠키 이름 설정
-    # 소셜 로그인 시 필요한 어댑터 지정 (user 앱에 adapters.py가 있다고 가정)
-    'SOCIALACCOUNT_ADAPTER': 'users.adapters.CustomSocialAccountAdapter', 
-    # 사용자 정의 Serializer를 사용하여 User 모델 필드 커스터마이징 가능
-    # 'USER_DETAILS_SERIALIZER': 'user.serializers.CustomUserDetailsSerializer', 
+    'JWT_AUTH_COOKIE': 'jwt-auth',
+    'JWT_AUTH_REFRESH_COOKIE': 'jwt-refresh',
+    'JWT_AUTH_HTTPONLY': False,  # 🔥 쿠키를 JavaScript에서 접근 가능하게 (로그아웃 시 삭제용)
+    'SOCIALACCOUNT_ADAPTER': 'users.adapters.CustomSocialAccountAdapter',
 }
 
-# 5. ALLAUTH 기본 설정
+# ===============================================
+# ALLAUTH 설정
+# ===============================================
 ACCOUNT_AUTHENTICATION_METHOD = 'email' 
 ACCOUNT_EMAIL_REQUIRED = True         
 ACCOUNT_UNIQUE_EMAIL = True           
 ACCOUNT_USERNAME_REQUIRED = False     
 ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_EMAIL_VERIFICATION = 'none' 
-ACCOUNT_LOGOUT_ON_GET = True
 
-# 리디렉션 URL 설정
 LOGIN_REDIRECT_URL = '/'
 ACCOUNT_LOGOUT_REDIRECT_URL = '/'
 
-# 6. Email 설정 (개발 환경: 콘솔 출력)
+# ⭐ 어댑터 설정 - 오타 수정 및 올바른 위치
+ACCOUNT_ADAPTER = 'users.adapters.CustomAccountAdapter'
+SOCIALACCOUNT_ADAPTER = 'users.adapters.CustomSocialAccountAdapter'  # 콜론이 아닌 등호!
+
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' 
 
-# 7. 소셜 로그인 설정
-kakao_clinet_id = os.environ.get("kakao_clinet_id")
+# ===============================================
+# 소셜 로그인 설정
+# ===============================================
+kakao_client_id = os.environ.get("kakao_client_id")
 kakao_secret = os.environ.get("kakao_secret")
 
 SOCIALACCOUNT_PROVIDERS = {
@@ -208,23 +182,47 @@ SOCIALACCOUNT_PROVIDERS = {
     },
     'kakao': {
         'APP': {
-            'client_id': kakao_clinet_id, 
+            'client_id': kakao_client_id, 
             'secret': kakao_secret,
             'key': ''
         },
         'SCOPE': [
             'account_email',
-        ]
+            'profile_nickname',  # 닉네임 정보 추가
+        ],
+        # 🔥 동의 항목 설정
+        'AUTH_PARAMS': {
+            'prompt': 'select_account',  # 계정 선택 화면 표시
+        },
+        'VERIFIED_EMAIL': False,
     }
 }
 
-# 8. JWT 설정 (dj-rest-auth에서 USE_JWT=True일 때 필수)
-# pip install djangorestframework-simplejwt 필요
+# ===============================================
+# JWT 설정
+# ===============================================
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5), # 액세스 토큰 만료 시간
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # 리프레시 토큰 만료 시간
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_COOKIE': 'jwt-auth',
+    'AUTH_COOKIE_REFRESH': 'jwt-refresh',
+    'AUTH_COOKIE_SECURE': False,  # 개발 환경에서는 False
+    'AUTH_COOKIE_HTTP_ONLY': False,  # 🔥 JavaScript에서 접근 가능하게
+    'AUTH_COOKIE_SAMESITE': 'Lax',
 }
+
+# ===============================================
+# OPENAI API KEY
+# ===============================================
+OPENAI_API_KEY = env.str("OPENAI_API_KEY", default=None)
+
+# ===============================================
+# 세션 설정 (로그아웃 시 쿠키 완전 삭제)
+# ===============================================
+SESSION_COOKIE_AGE = 86400  # 1일
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
