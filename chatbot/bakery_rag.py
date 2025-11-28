@@ -5,7 +5,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
-import openai
+from openai import OpenAI
 from tqdm import tqdm
 
 # ----------------- 0. 설정 -----------------
@@ -418,7 +418,9 @@ class BakeryRAGSystem:
         
         if use_openai and OPENAI_API_KEY != "your-api-key-here":
             # OpenAI API 사용
-            openai.api_key = OPENAI_API_KEY
+            client = OpenAI(
+                    api_key = OPENAI_API_KEY,
+                )
             
             prompt = f"""당신은 친절한 빵집 추천 전문가입니다. 
 사용자의 질문에 대해 검색된 빵집 정보를 바탕으로 자연스럽고 친근한 답변을 작성해주세요.
@@ -430,9 +432,11 @@ class BakeryRAGSystem:
 
 위 정보를 바탕으로 사용자에게 빵집을 추천하는 답변을 작성해주세요. 
 각 빵집의 특징과 장점을 구체적으로 설명해주세요."""
+            prompt = prompt.encode('utf-8', 'ignore').decode('utf-8')
 
             try:
-                response = openai.ChatCompletion.create(
+                print("Debug checkpoint 1")
+                response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
                         {"role": "system", "content": "당신은 친절한 빵집 추천 전문가입니다."},
@@ -441,6 +445,7 @@ class BakeryRAGSystem:
                     temperature=0.7,
                     max_tokens=500
                 )
+                print("Debug checkpoint 2")
                 return response.choices[0].message.content
             except Exception as e:
                 print(f"⚠️ OpenAI API 오류: {e}")
