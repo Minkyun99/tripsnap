@@ -21,14 +21,6 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
-<<<<<<< HEAD
-    # ASGI 서버 앱 (가장 위에 있어야 함, 웹소켓 실행 엔진)
-    # "daphne",
-
-    # 0. Django 기본 내장 앱들 (필수)
-=======
-    "daphne",
->>>>>>> fc39d3e61b9c892281db0ab08d8fb0404f4ffa74
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
