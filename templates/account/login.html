@@ -1,0 +1,76 @@
+{% extends "base/index.html" %} {% load socialaccount %} {% block title %}로그인
+- TripSnap{% endblock title %} {% block content %}
+<div
+  class="max-w-md mx-auto bg-white/90 rounded-2xl shadow-xl p-8 border-4 border-[#D2691E] pixel-corners"
+>
+  <h2 class="text-3xl font-extrabold text-center text-[#D2691E] mb-6">
+    로그인
+  </h2>
+
+  <p class="text-center text-gray-600 mb-6">
+    계정으로 로그인하거나 소셜 계정을 사용할 수 있습니다.
+  </p>
+
+  {# ===== 폼 에러 간단 표시 ===== #} {% if form.errors %}
+  <div class="mb-4 p-3 rounded-lg bg-red-100 text-red-700 text-sm">
+    이메일 또는 비밀번호가 올바르지 않습니다. 다시 확인해주세요.
+  </div>
+  {% endif %} {# ===== 카카오 로그인 버튼 ===== #}
+  <a
+    href="{% provider_login_url 'kakao' %}"
+    class="kakao-btn w-full py-3 rounded-lg flex items-center justify-center gap-2 text-lg font-bold mb-6 bg-[#FEE500] text-[#3C1E1E]"
+  >
+    <img
+      src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_small.png"
+      class="w-6 h-6"
+      alt="kakao-logo"
+    />
+    카카오로 3초 로그인
+  </a>
+
+  <div class="relative mb-6">
+    <span class="absolute inset-0 flex items-center">
+      <span class="w-full border-t border-gray-300"></span>
+    </span>
+    <span
+      class="relative flex justify-center text-sm text-gray-500 bg-white px-2"
+      >또는</span
+    >
+  </div>
+
+  {# ===== 실제 로그인 폼 (allauth) ===== #}
+  <form method="POST" action="{% url 'account_login' %}" class="space-y-4">
+    {% csrf_token %}
+    <input
+      type="text"
+      name="login"
+      placeholder="이메일"
+      required
+      class="w-full px-4 py-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-[#D2691E]"
+    />
+    <input
+      type="password"
+      name="password"
+      placeholder="비밀번호"
+      required
+      class="w-full px-4 py-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-[#D2691E]"
+    />
+    <button
+      type="submit"
+      class="w-full bg-[#FF69B4] text-white py-3 rounded-lg font-bold hover:bg-[#FF1493] transition"
+    >
+      로그인
+    </button>
+  </form>
+
+  <p class="text-center text-sm text-gray-600 mt-6">
+    아직 계정이 없으신가요?
+    <a
+      href="{% url 'account_signup' %}"
+      class="text-[#D2691E] font-bold hover:underline"
+    >
+      회원가입
+    </a>
+  </p>
+</div>
+{% endblock content %}

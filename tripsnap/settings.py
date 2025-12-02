@@ -155,6 +155,7 @@ ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_EMAIL_VERIFICATION = 'none' 
 
 LOGIN_REDIRECT_URL = '/'
+ACCOUNT_SIGNUP_REDIRECT_URL = '/'
 ACCOUNT_LOGOUT_REDIRECT_URL = '/'
 
 # ⭐ 어댑터 설정 - 오타 수정 및 올바른 위치
@@ -162,6 +163,11 @@ ACCOUNT_ADAPTER = 'users.adapters.CustomAccountAdapter'
 SOCIALACCOUNT_ADAPTER = 'users.adapters.CustomSocialAccountAdapter'  # 콜론이 아닌 등호!
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' 
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
 
 # ===============================================
 # 소셜 로그인 설정

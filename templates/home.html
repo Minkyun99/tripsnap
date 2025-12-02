@@ -1,261 +1,67 @@
-{% load socialaccount %}
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>트립스냅 홈</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #FFE8CC 0%, #FFDAB9 100%);
-            min-height: 100vh;
-        }
-        
-        /* 픽셀 스타일 모서리 */
-        .pixel-corners {
-            clip-path: polygon(
-                0 8px, 8px 8px, 8px 0,
-                calc(100% - 8px) 0, calc(100% - 8px) 8px, 100% 8px,
-                100% calc(100% - 8px), calc(100% - 8px) calc(100% - 8px),
-                calc(100% - 8px) 100%, 8px 100%, 8px calc(100% - 8px),
-                0 calc(100% - 8px)
-            );
-        }
-        
-        /* 빵 아이콘 애니메이션 */
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(5deg); }
-        }
-        
-        .bread-float {
-            animation: float 3s ease-in-out infinite;
-        }
-        
-        /* 카카오 버튼 스타일 */
-        .kakao-btn {
-            background: #FEE500;
-            color: #3C1E1E;
-            transition: all 0.3s ease;
-        }
-        
-        .kakao-btn:hover {
-            background: #FEEA46;
-            transform: scale(1.05);
-        }
-    </style>
-</head>
-<body class="min-h-screen flex flex-col">
-    
-    <!-- 헤더 -->
-    <header class="bg-[#FFE8CC] border-b-4 border-[#D2691E] p-6 pixel-corners">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-4">
-                <div class="bread-float text-5xl">🍞</div>
-                <div>
-                    <h1 class="text-4xl font-bold text-[#D2691E]">tripsnap</h1>
-                    <p class="text-[#8B4513] font-semibold">🍞 AI 빵집 추천 서비스</p>
-                </div>
-            </div>
+{% extends "base/index.html" %} {% load socialaccount %}{% block content %}
+<div
+  class="max-w-4xl w-full mx-auto bg-white/90 rounded-2xl shadow-2xl border-4 border-[#D2691E] p-12 pixel-corners"
+>
+  {% if user.is_authenticated %}
+  <!-- 로그인 상태 -->
+  <div class="text-center">
+    <div class="text-9xl bread-float mb-8">🥐</div>
 
-            {% if request.user.is_authenticated %}
-                <!-- 로그인된 상태 -->
-                <div class="flex items-center gap-4">
-                    <div class="bg-white/80 px-4 py-2 rounded-lg border-2 border-[#D2691E]">
-                        <p class="text-[#8B4513] font-semibold">
-                            환영합니다, <span class="text-[#D2691E]">{{ request.user.nickname|default:request.user.username }}</span>님! 🎉
-                        </p>
-                    </div>
-                    <a href="/users/profile/" 
-                       class="bg-[#D2691E] text-white p-3 rounded-full border-2 border-[#8B4513] hover:bg-[#8B4513] transition-all duration-300 hover:scale-110">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
-                        </svg>
-                    </a>
-                </div>
-            {% else %}
-                <!-- 로그인되지 않은 상태 -->
-                <div class="flex items-center gap-3">
-                    <p class="text-[#8B4513] font-semibold">로그인하고 맞춤 빵집을 찾아보세요! 🍞</p>
-                </div>
-            {% endif %}
-        </div>
-    </header>
+    <h2 class="text-4xl font-bold text-[#D2691E] mb-4">
+      맛있는 빵집 여행을 시작하세요!
+    </h2>
 
-    <!-- 메인 콘텐츠 -->
-    <main class="flex-1 p-6 flex items-center justify-center">
-        <div class="max-w-4xl w-full">
-            <div class="bg-white/90 rounded-2xl shadow-2xl border-4 border-[#D2691E] pixel-corners overflow-hidden">
-                {% if request.user.is_authenticated %}
-                    <!-- 로그인된 사용자용 콘텐츠 -->
-                    <div class="p-12 text-center">
-                        <div class="flex justify-center mb-8">
-                            <div class="text-9xl bread-float">🥐</div>
-                        </div>
-                        
-                        <h2 class="text-4xl font-bold text-[#D2691E] mb-4">
-                            맛있는 빵집 여행을 시작하세요!
-                        </h2>
-                        
-                        <p class="text-xl text-[#8B4513] mb-8">
-                            {{ request.user.nickname|default:request.user.username }}님의 취향에 맞는<br>
-                            완벽한 빵집을 AI가 추천해드립니다 ✨
-                        </p>
-                        
-                        <div class="flex flex-col md:flex-row gap-4 justify-center items-center mt-8">
-                            <a href="/users/profile/" 
-                               class="inline-flex items-center justify-center px-8 py-4 bg-[#FF69B4] text-white font-bold text-lg rounded-xl pixel-corners border-3 border-[#D2691E] hover:bg-[#FF1493] transition-all duration-300 hover:scale-105 shadow-lg">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
-                                </svg>
-                                내 프로필 보기
-                            </a>
-                            
-                            <a href="{% url 'account_logout' %}" 
-                               class="inline-flex items-center justify-center px-8 py-4 bg-white text-[#8B4513] font-bold text-lg rounded-xl pixel-corners border-3 border-[#D2691E] hover:bg-[#FFE8CC] transition-all duration-300 hover:scale-105 shadow-lg">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" />
-                                </svg>
-                                로그아웃
-                            </a>
-                        </div>
-                        
-                        <!-- 탈퇴 버튼 -->
-                        <div class="mt-12 pt-8 border-t-2 border-[#D2691E]/30">
-                            <button onclick="confirmDelete()" 
-                                    class="inline-flex items-center justify-center px-6 py-3 bg-red-500 text-white font-semibold rounded-lg pixel-corners border-2 border-red-700 hover:bg-red-600 transition-all duration-300 hover:scale-105">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                </svg>
-                                회원 탈퇴
-                            </button>
-                        </div>
-                    </div>
-                {% else %}
-                    <!-- 로그인되지 않은 사용자용 콘텐츠 -->
-                    <div class="p-12 text-center">
-                        <div class="flex justify-center mb-8">
-                            <div class="text-9xl bread-float">🥖</div>
-                        </div>
-                        
-                        <h2 class="text-4xl font-bold text-[#D2691E] mb-4">
-                            당신만을 위한 빵집을 찾아드려요!
-                        </h2>
-                        
-                        <p class="text-xl text-[#8B4513] mb-8">
-                            AI가 분석한 맞춤형 빵집 추천으로<br>
-                            특별한 여행을 시작하세요 ✨
-                        </p>
-                        
-                        <div class="bg-[#FFE8CC]/50 rounded-xl p-6 mb-8 border-2 border-[#D2691E]">
-                            <h3 class="text-2xl font-bold text-[#D2691E] mb-4">🎉 3초만에 시작하기</h3>
-                            <p class="text-[#8B4513] mb-4">카카오 계정으로 간편하게 로그인하고<br>당신의 취향에 맞는 빵집을 찾아보세요!</p>
-                        </div>
-                        
-                        <a href="{% provider_login_url 'kakao' %}" 
-                           class="inline-flex items-center justify-center px-10 py-5 kakao-btn font-bold text-xl rounded-xl pixel-corners border-3 border-[#D2691E] shadow-lg hover:shadow-xl transition-all duration-300">
-                            <img src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_small.png" 
-                                 alt="카카오 로고" 
-                                 class="w-6 h-6 mr-3">
-                            카카오로 3초 로그인
-                        </a>
-                        
-                        <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div class="bg-white/80 p-4 rounded-lg border-2 border-[#D2691E]">
-                                <div class="text-4xl mb-2">🎯</div>
-                                <h4 class="font-bold text-[#D2691E] mb-1">맞춤 추천</h4>
-                                <p class="text-sm text-[#8B4513]">AI가 당신의 취향을 분석해요</p>
-                            </div>
-                            <div class="bg-white/80 p-4 rounded-lg border-2 border-[#D2691E]">
-                                <div class="text-4xl mb-2">🗺️</div>
-                                <h4 class="font-bold text-[#D2691E] mb-1">지역 탐색</h4>
-                                <p class="text-sm text-[#8B4513]">전국의 숨은 빵집을 발견해요</p>
-                            </div>
-                            <div class="bg-white/80 p-4 rounded-lg border-2 border-[#D2691E]">
-                                <div class="text-4xl mb-2">💖</div>
-                                <h4 class="font-bold text-[#D2691E] mb-1">리뷰 공유</h4>
-                                <p class="text-sm text-[#8B4513]">다른 여행자와 경험을 나눠요</p>
-                            </div>
-                        </div>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-    </main>
+    <p class="text-xl text-[#8B4513] mb-8">
+      {{ user.nickname|default:user.username }}님의 취향에 맞는 빵집을
+      추천합니다
+    </p>
 
-    <!-- 푸터 -->
-    <footer class="bg-[#FFE8CC] border-t-4 border-[#D2691E] p-4 text-center pixel-corners">
-        <p class="text-[#8B4513] font-semibold">
-            ✨ 맛있는 빵집을 찾아 행복한 여행을 만들어요 ✨
-        </p>
-        <p class="text-xs text-[#D2691E] mt-1 font-medium">
-            Made with 💖 by tripsnap
-        </p>
-    </footer>
+    <a
+      href="/users/profile/"
+      class="inline-block px-8 py-4 bg-[#FF69B4] text-white font-bold text-lg rounded-xl pixel-corners border-3 border-[#D2691E] hover:scale-105 transition duration-300"
+    >
+      내 프로필 보기
+    </a>
+  </div>
 
-    <!-- 탈퇴 확인 모달 -->
-    <div id="deleteModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-[#D2691E] pixel-corners">
-            <div class="text-center mb-6">
-                <div class="text-6xl mb-4">😢</div>
-                <h2 class="text-3xl font-bold text-[#D2691E] mb-3">정말 떠나시나요?</h2>
-                <p class="text-[#8B4513] text-lg">
-                    계정을 탈퇴하면 모든 데이터가 삭제되며,<br>
-                    이 작업은 되돌릴 수 없습니다.
-                </p>
-            </div>
-            <div class="flex gap-4">
-                <button onclick="closeModal()" 
-                        class="flex-1 px-4 py-3 bg-white text-[#8B4513] font-bold rounded-lg pixel-corners border-2 border-[#D2691E] hover:bg-[#FFE8CC] transition-all duration-300">
-                    취소
-                </button>
-                <form action="{% url 'users:account_delete' %}" method="POST" class="flex-1">
-                    {% csrf_token %}
-                    <button type="submit" 
-                            class="w-full px-4 py-3 bg-red-500 text-white font-bold rounded-lg pixel-corners border-2 border-red-700 hover:bg-red-600 transition-all duration-300">
-                        탈퇴하기
-                    </button>
-                </form>
-            </div>
-        </div>
+  {% else %}
+  <!-- 비로그인 상태 -->
+  <div class="text-center">
+    <div class="text-9xl bread-float mb-8">🥖</div>
+
+    <h2 class="text-4xl font-bold text-[#D2691E] mb-4">
+      당신만을 위한 빵집을 찾아드려요!
+    </h2>
+
+    <p class="text-xl text-[#8B4513] mb-8">카카오 계정으로 간편하게 로그인</p>
+
+    <a
+      href="{% provider_login_url 'kakao' %}"
+      class="px-10 py-5 bg-[#FEE500] text-[#3C1E1E] rounded-xl pixel-corners font-bold text-xl border-3 border-[#D2691E] hover:scale-105 transition"
+    >
+      카카오로 3초 로그인
+    </a>
+
+    <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white/80 p-4 rounded-lg border-2 border-[#D2691E]">
+        <div class="text-4xl mb-2">🎯</div>
+        <h4 class="font-bold text-[#D2691E] mb-1">맞춤 추천</h4>
+        <p class="text-sm text-[#8B4513]">AI가 당신의 취향을 분석해요</p>
+      </div>
+
+      <div class="bg-white/80 p-4 rounded-lg border-2 border-[#D2691E]">
+        <div class="text-4xl mb-2">🗺️</div>
+        <h4 class="font-bold text-[#D2691E] mb-1">지역 탐색</h4>
+        <p class="text-sm text-[#8B4513]">전국의 숨은 빵집을 발견해요</p>
+      </div>
+
+      <div class="bg-white/80 p-4 rounded-lg border-2 border-[#D2691E]">
+        <div class="text-4xl mb-2">💖</div>
+        <h4 class="font-bold text-[#D2691E] mb-1">리뷰 공유</h4>
+        <p class="text-sm text-[#8B4513]">다른 여행자와 경험을 나눠요</p>
+      </div>
     </div>
-
-    <!-- 배경 장식 (떠다니는 빵들) -->
-    <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div class="absolute text-5xl opacity-10" style="left: 10%; top: 20%; animation: float 5s ease-in-out infinite;">🥐</div>
-        <div class="absolute text-5xl opacity-10" style="left: 80%; top: 30%; animation: float 6s ease-in-out infinite 1s;">🥖</div>
-        <div class="absolute text-5xl opacity-10" style="left: 15%; top: 70%; animation: float 7s ease-in-out infinite 2s;">🍩</div>
-        <div class="absolute text-5xl opacity-10" style="left: 85%; top: 75%; animation: float 5.5s ease-in-out infinite 3s;">🥯</div>
-        <div class="absolute text-5xl opacity-10" style="left: 50%; top: 15%; animation: float 6.5s ease-in-out infinite 1.5s;">🍞</div>
-        <div class="absolute text-5xl opacity-10" style="left: 25%; top: 50%; animation: float 8s ease-in-out infinite 2.5s;">🥐</div>
-        <div class="absolute text-5xl opacity-10" style="left: 70%; top: 60%; animation: float 7.5s ease-in-out infinite 0.5s;">🍩</div>
-    </div>
-
-    <script>
-        function confirmDelete() {
-            document.getElementById('deleteModal').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('deleteModal').classList.add('hidden');
-        }
-
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                closeModal();
-            }
-        });
-
-        document.getElementById('deleteModal').addEventListener('click', function(event) {
-            if (event.target === this) {
-                closeModal();
-            }
-        });
-    </script>
-</body>
-</html>
+  </div>
+  {% endif %}
+</div>
+{% endblock content %}
