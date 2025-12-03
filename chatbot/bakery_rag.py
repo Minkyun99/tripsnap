@@ -417,10 +417,19 @@ class BakeryRAGSystem:
         ])
         
         if use_openai and OPENAI_API_KEY != "your-api-key-here":
-            # OpenAI API 사용
+            # GMS API 사용
+            
+            # GMS 프록시 엔드포인트 설정
+            GMS_BASE_URL = "https://gms.ssafy.io/gmsapi/api.openai.com/v1"
+            
+            # OpenAI 클라이언트 초기화 시 base_url과 api_key 설정
             client = OpenAI(
-                    api_key = OPENAI_API_KEY,
-                )
+                api_key=OPENAI_API_KEY,  # 환경변수에 저장된 GMS_KEY 사용
+                base_url=GMS_BASE_URL,   # GMS 프록시 주소 설정
+            )
+            
+            # 모델은 gpt-4.1-nano로 유지 (GMS에서 해당 모델을 지원한다고 가정)
+            MODEL_NAME = "gpt-4.1-nano"
             
             prompt = f"""당신은 친절한 빵집 추천 전문가입니다. 
 사용자의 질문에 대해 검색된 빵집 정보를 바탕으로 자연스럽고 친근한 답변을 작성해주세요.
@@ -437,7 +446,7 @@ class BakeryRAGSystem:
             try:
                 print("Debug checkpoint 1")
                 response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
+                    model="gpt-4.1-nano",
                     messages=[
                         {"role": "system", "content": "당신은 친절한 빵집 추천 전문가입니다."},
                         {"role": "user", "content": prompt}

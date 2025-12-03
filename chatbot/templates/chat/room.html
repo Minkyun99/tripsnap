@@ -283,6 +283,23 @@
 
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    let cookie = cookies[i].trim();
+                    // Does this cookie string begin with the name we want?
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
         const chatLog = document.getElementById('chat-log')
         const messageInput = document.getElementById('message-input')
         const walkingBreadContainer = document.getElementById('walking-bread-container')
@@ -295,6 +312,7 @@
         // CSRF Token 설정
         axios.defaults.xsrfCookieName = 'csrftoken'
         axios.defaults.xsrfHeaderName = 'X-CSRFTOKEN'
+        axios.defaults.headers.common['X-CSRFTOKEN'] = csrftoken;
 
         // 초기 시간 설정
         document.getElementById('initial-time').textContent = getTimeString()
@@ -344,9 +362,12 @@
             startWalking()
 
             try {
+                console.log('요청 시작:', message)
                 const response = await axios.post('/chatbot/chat/', {
                     message: message
                 });
+
+                console.log('응답:', response.data)
 
                 // 최소 애니메이션 시간 보장
                 const elapsedTime = Date.now() - startTime
@@ -377,6 +398,8 @@
                 }
             } catch (error) {
                 stopWalking()
+                console.log('에러 상태:', error.response?.status)
+                console.log('에러 데이터:', error.response?.data)
                 addMessage('bot', '❌ 오류가 발생했습니다: ' + error.message)
             }
         }

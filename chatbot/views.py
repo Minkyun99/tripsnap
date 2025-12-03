@@ -5,14 +5,13 @@ from django.shortcuts import render
 from .rag_wrapper import RAGWrapper
 # csrf 꺼두는 기능 https://dev-guardy.tistory.com/80
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import api_view
 
 # Create your views here.
 def chatbot(request):
     return render(request, "chat/room.html")
 
 @api_view(['POST'])
-@csrf_exempt
+# @csrf_exempt
 def chat(request):
     if request.method == 'POST':
         print("=== 요청 받음 ===")
