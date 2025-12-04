@@ -176,7 +176,6 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <!-- 헤더 -->
     <header class="bg-[#FFE8CC] border-b-4 border-[#D2691E] p-6 pixel-corners">
         <div class="max-w-6xl mx-auto flex items-center justify-between">
             <div class="flex items-center gap-4">
@@ -186,49 +185,30 @@
                     <p class="text-[#8B4513] font-semibold">🍞 AI 빵집 추천 서비스</p>
                 </div>
             </div>
-            <a href="/" class="bg-white text-[#D2691E] px-6 py-3 rounded-lg pixel-corners border-2 border-[#D2691E] hover:bg-[#FFE8CC] transition-all duration-300 font-bold">
+            <a href="/select/" class="bg-white text-[#D2691E] px-6 py-3 rounded-lg pixel-corners border-2 border-[#D2691E] hover:bg-[#FFE8CC] transition-all duration-300 font-bold">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-2" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd" />
                 </svg>
-                홈으로
+                키워드 선택
             </a>
         </div>
     </header>
 
-    <!-- 메인 콘텐츠 -->
     <main class="flex-1 p-6">
         <div class="max-w-4xl mx-auto">
-            <!-- 채팅 컨테이너 -->
             <div class="chat-container bg-white/90 rounded-2xl pixel-corners border-4 border-[#D2691E] shadow-2xl overflow-hidden">
-                <!-- 채팅 로그 영역 -->
                 <div id="chat-log" class="p-6 space-y-4">
-                    <!-- 환영 메시지 -->
-                    <div class="message bot">
-                        <div class="bot-avatar">🍞</div>
-                        <div>
-                            <div class="message-bubble">
-                                안녕하세요! 대전의 맛있는 빵집을 찾아드릴게요! 🍞✨<br>
-                                어떤 빵집을 찾으시나요?
-                            </div>
-                            <div class="timestamp" id="initial-time"></div>
-                        </div>
-                    </div>
-
-                    <!-- WalkingBread 애니메이션 -->
                     <div id="walking-bread-container" class="walking-bread-container pixel-corners">
                         <div id="walking-bread" class="walking-bread">
                             <svg viewBox="0 0 64 64" class="w-16 h-16">
-                                <!-- 빵 몸체 -->
                                 <rect x="16" y="20" width="32" height="28" fill="#F4A460" />
                                 <rect x="12" y="24" width="4" height="20" fill="#D2691E" />
                                 <rect x="48" y="24" width="4" height="20" fill="#D2691E" />
                                 <rect x="16" y="16" width="32" height="4" fill="#D2691E" />
                                 <rect x="20" y="12" width="24" height="4" fill="#D2691E" />
-                                <!-- 얼굴 -->
                                 <rect x="24" y="28" width="4" height="4" fill="#000" />
                                 <rect x="36" y="28" width="4" height="4" fill="#000" />
                                 <rect x="28" y="36" width="8" height="4" fill="#FF69B4" />
-                                <!-- 다리 -->
                                 <rect x="20" y="48" width="8" height="4" fill="#8B4513" class="animate-walk" />
                                 <rect x="36" y="48" width="8" height="4" fill="#8B4513" class="animate-walk" style="animation-delay: 0.15s;" />
                             </svg>
@@ -237,7 +217,6 @@
                     </div>
                 </div>
 
-                <!-- 입력 영역 -->
                 <div class="p-4 bg-[#FFE8CC] border-t-4 border-[#D2691E]">
                     <div class="flex gap-2">
                         <input 
@@ -263,7 +242,6 @@
         </div>
     </main>
 
-    <!-- 푸터 -->
     <footer class="bg-[#FFE8CC] border-t-4 border-[#D2691E] p-4 text-center pixel-corners mt-8">
         <p class="text-[#8B4513] font-semibold">
             ✨ 맛있는 빵집을 찾아 행복한 여행을 만들어요 ✨
@@ -273,7 +251,6 @@
         </p>
     </footer>
 
-    <!-- 배경 장식 -->
     <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         <div class="absolute text-5xl opacity-10" style="left: 10%; top: 20%; animation: float 5s ease-in-out infinite;">🥐</div>
         <div class="absolute text-5xl opacity-10" style="left: 80%; top: 30%; animation: float 6s ease-in-out infinite 1s;">🥖</div>
@@ -283,13 +260,18 @@
 
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script>
+        // 서버에서 전달된 conversation id (없을 수 있음)
+        const CONVERSATION_ID = "{{ conversation_id|default:''|escapejs }}";
+
+        // ----------------------------------------------------
+        // 1. 초기 설정 및 유틸리티 함수
+        // ----------------------------------------------------
         function getCookie(name) {
             let cookieValue = null;
             if (document.cookie && document.cookie !== '') {
                 const cookies = document.cookie.split(';');
                 for (let i = 0; i < cookies.length; i++) {
                     let cookie = cookies[i].trim();
-                    // Does this cookie string begin with the name we want?
                     if (cookie.substring(0, name.length + 1) === (name + '=')) {
                         cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
                         break;
@@ -314,96 +296,13 @@
         axios.defaults.xsrfHeaderName = 'X-CSRFTOKEN'
         axios.defaults.headers.common['X-CSRFTOKEN'] = csrftoken;
 
-        // 초기 시간 설정
-        document.getElementById('initial-time').textContent = getTimeString()
-
-        function startWalking() {
-            // 기존 interval 정리
-            if (walkingInterval) {
-                clearInterval(walkingInterval);
-            }
-            
-            // 애니메이션 초기화
-            walkingBreadContainer.classList.remove('active');
-            breadPosition = 0;
-            
-            // 다음 프레임에서 애니메이션 시작 (브라우저가 변경사항 인식 보장)
-            setTimeout(() => {
-                walkingBreadContainer.classList.add('active');
-                walkingBread.style.left = '0%';
-                
-                walkingInterval = setInterval(() => {
-                    breadPosition += 2;
-                    if (breadPosition >= 100) {
-                        breadPosition = 0;
-                    }
-                    walkingBread.style.left = breadPosition + '%';
-                }, 50);
-            }, 10);
+        function getTimeString() {
+            return new Date().toLocaleTimeString('ko-KR', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            })
         }
 
-        function stopWalking() {
-            if (walkingInterval) {
-                clearInterval(walkingInterval)
-                walkingInterval = null
-            }
-            walkingBreadContainer.classList.remove('active')
-        }
-
-        async function sendMessage() {
-            const message = messageInput.value.trim()
-            if (!message) return;
-
-            addMessage('user', message)
-            messageInput.value = ''
-
-            // 모든 메시지에 대해 걷는 빵 표시
-            const startTime = Date.now()
-            startWalking()
-
-            try {
-                console.log('요청 시작:', message)
-                const response = await axios.post('/chatbot/chat/', {
-                    message: message
-                });
-
-                console.log('응답:', response.data)
-
-                // 최소 애니메이션 시간 보장
-                const elapsedTime = Date.now() - startTime
-                const remainingTime = Math.max(0, MIN_ANIMATION_TIME - elapsedTime)
-                
-                await new Promise(resolve => setTimeout(resolve, remainingTime))
-
-                stopWalking()
-                const data = response.data
-
-                if (data.llm_response) {
-                    addMessage('bot', data.llm_response)
-                }
-
-                if (data.results && data.results.length > 0) {
-                    let recs = '<div class="space-y-2"><b class="block mb-2">🍞 추천 빵집:</b>'
-                    data.results.forEach((rec, i) => {
-                        recs += `
-                            <div class="recommendation-card">
-                                <h4 class="font-bold text-[#D2691E] mb-1">${rec.place_name}</h4>
-                                ${rec.address ? `<p class="text-sm">📍 ${rec.address}</p>` : ''}
-                                ${rec.rating ? `<p class="text-sm">⭐ ${rec.rating}</p>` : ''}
-                            </div>
-                        `
-                    })
-                    recs += '</div>'
-                    addMessage('bot', recs)
-                }
-            } catch (error) {
-                stopWalking()
-                console.log('에러 상태:', error.response?.status)
-                console.log('에러 데이터:', error.response?.data)
-                addMessage('bot', '❌ 오류가 발생했습니다: ' + error.message)
-            }
-        }
-        
         function addMessage(sender, text) {
             const messageDiv = document.createElement('div')
             messageDiv.className = `message ${sender}`
@@ -432,17 +331,174 @@
             chatLog.insertBefore(messageDiv, walkingBreadContainer)
             chatLog.scrollTop = chatLog.scrollHeight
         }
-        
-        function getTimeString() {
-            return new Date().toLocaleTimeString('ko-KR', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            })
+
+        // ----------------------------------------------------
+        // 2. 걷는 빵 애니메이션 함수
+        // ----------------------------------------------------
+        function startWalking() {
+            if (walkingInterval) {
+                clearInterval(walkingInterval);
+            }
+            
+            walkingBreadContainer.classList.remove('active');
+            breadPosition = 0;
+            
+            setTimeout(() => {
+                walkingBreadContainer.classList.add('active');
+                walkingBread.style.left = '0%';
+                
+                walkingInterval = setInterval(() => {
+                    breadPosition += 2;
+                    if (breadPosition >= 100) {
+                        breadPosition = 0;
+                    }
+                    walkingBread.style.left = breadPosition + '%';
+                }, 50);
+            }, 10);
+        }
+
+        function stopWalking() {
+            if (walkingInterval) {
+                clearInterval(walkingInterval)
+                walkingInterval = null
+            }
+            walkingBreadContainer.classList.remove('active')
+        }
+
+        // ----------------------------------------------------
+        // 3. 메시지 전송 로직
+        // ----------------------------------------------------
+        async function sendMessage(messageToSend = null) {
+            const message = messageToSend || messageInput.value.trim()
+            if (!message) return;
+
+            addMessage('user', message)
+            if (!messageToSend) messageInput.value = '' // 자동 전송이 아닐 경우에만 입력 필드 비움
+
+            // 모든 메시지에 대해 걷는 빵 표시
+            const startTime = Date.now()
+            startWalking()
+
+            try {
+                console.log('요청 시작:', message)
+                // Django 백엔드의 채팅 엔드포인트에 요청
+                const payload = { message: message };
+                if (CONVERSATION_ID) payload.conversation_id = CONVERSATION_ID;
+
+                const response = await axios.post('/chatbot/chat/', payload);
+
+                console.log('응답:', response.data)
+
+                // 최소 애니메이션 시간 보장
+                const elapsedTime = Date.now() - startTime
+                const remainingTime = Math.max(0, MIN_ANIMATION_TIME - elapsedTime)
+                
+                await new Promise(resolve => setTimeout(resolve, remainingTime))
+
+                stopWalking()
+                const data = response.data
+
+                if (data.llm_response) {
+                    addMessage('bot', data.llm_response)
+                }
+
+                if (data.results && data.results.length > 0) {
+                    let recs = '<div class="space-y-2"><b class="block mb-2">🍞 추천 빵집:</b>'
+                    data.results.forEach((rec) => {
+                        recs += `
+                            <div class="recommendation-card">
+                                <h4 class="font-bold text-[#D2691E] mb-1">${rec.place_name}</h4>
+                                ${rec.address ? `<p class="text-sm">📍 ${rec.address}</p>` : ''}
+                                ${rec.rating ? `<p class="text-sm">⭐ ${rec.rating}</p>` : ''}
+                            </div>
+                        `
+                    })
+                    recs += '</div>'
+                    addMessage('bot', recs)
+                }
+            } catch (error) {
+                stopWalking()
+                console.log('에러 상태:', error.response?.status)
+                console.log('에러 데이터:', error.response?.data)
+                addMessage('bot', '❌ 오류가 발생했습니다: ' + (error.response?.data?.error || error.message))
+            }
         }
         
+        // ----------------------------------------------------
+        // 4. 이벤트 리스너 및 초기화
+        // ----------------------------------------------------
         messageInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter') sendMessageWithTrigger();
         })
+
+        // Overwrite sendMessage to include 'trigger' flag when message is a recommendation request
+        const _sendMessage = sendMessage;
+        async function sendMessageWithTrigger(messageToSend = null) {
+            const message = messageToSend || messageInput.value.trim();
+            if (!message) return;
+
+            // If it's not a recommendation request, call original sendMessage which will save the message
+            // (server now will not call RAG unless message includes '추천' or trigger is provided)
+            if (isRecommendationRequest(message)) {
+                // include trigger flag by sending through axios directly
+                addMessage('user', message);
+                if (!messageToSend) messageInput.value = '';
+                const payload = { message: message };
+                if (CONVERSATION_ID) payload.conversation_id = CONVERSATION_ID;
+                payload.trigger = true;
+
+                startWalking();
+                try {
+                    const response = await axios.post('/chatbot/chat/', payload);
+                    stopWalking();
+                    const data = response.data;
+                    if (data.llm_response) addMessage('bot', data.llm_response);
+                    if (data.results && data.results.length > 0) {
+                        let recs = '<div class="space-y-2"><b class="block mb-2">🍞 추천 빵집:</b>'
+                        data.results.forEach((rec) => {
+                            recs += `
+                                <div class="recommendation-card">
+                                    <h4 class="font-bold text-[#D2691E] mb-1">${rec.place_name}</h4>
+                                    ${rec.address ? `<p class="text-sm">📍 ${rec.address}</p>` : ''}
+                                    ${rec.rating ? `<p class="text-sm">⭐ ${rec.rating}</p>` : ''}
+                                </div>
+                            `
+                        })
+                        recs += '</div>'
+                        addMessage('bot', recs)
+                    }
+                } catch (err) {
+                    stopWalking();
+                    addMessage('bot', '❌ 오류가 발생했습니다. 다시 시도해주세요.');
+                }
+                return;
+            }
+
+            // Not a recommendation request -> just save the user's message (server will return {saved: true})
+            _sendMessage(messageToSend);
+        }
+
+        // Replace onclick on send button to use sendMessageWithTrigger
+        document.querySelector('button[onclick="sendMessage()"]').onclick = function() { sendMessageWithTrigger(); };
+
+        // 초기 메시지(서버에서 만든 안내 메시지)를 화면에 표시합니다.
+        window.onload = function() {
+            const initial1 = "{{ initial_bot_1|default:''|escapejs }}";
+            const initial2 = "{{ initial_bot_2|default:''|escapejs }}";
+
+            if (initial1) addMessage('bot', initial1);
+            if (initial2) addMessage('bot', initial2);
+
+            // Do NOT auto-send to RAG. Wait for the user to either give more details
+            // or type "추천해줘" (or similar) to trigger recommendation.
+        }
+
+        // Helper: determine if a user's message requests immediate recommendation
+        function isRecommendationRequest(text) {
+            if (!text) return false;
+            const t = text.toLowerCase();
+            return t.includes('추천') || t.includes('추천해');
+        }
     </script>
 </body>
 </html>
