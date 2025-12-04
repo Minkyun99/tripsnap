@@ -6,8 +6,15 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
   >
     <!-- ===== 프로필 헤더 ===== -->
     <div
-      class="bg-gradient-to-r from-[#FF69B4] to-[#FFB6C1] p-8 border-b-4 border-[#D2691E] flex flex-col md:flex-row gap-6 items-center"
+      class="bg-gradient-to-r from-[#FF69B4] to-[#FFB6C1] p-8 border-b-4 border-[#D2691E] flex flex-col md:flex-row gap-6 items-center relative"
     >
+      <a
+        href="{% url 'users:settings' %}"
+        class="absolute top-3 right-3 bg-white/90 text-[#D2691E] rounded-full p-2 shadow hover:bg-white transition"
+      >
+        ⚙️
+      </a>
+
       <!-- PROFILE IMAGE -->
       <div class="relative">
         {% if profile.profile_img %}
@@ -53,6 +60,7 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
         <p class="text-lg opacity-80 mb-4">@{{ target_user.username }}</p>
 
         <div class="flex gap-6 justify-center md:justify-start">
+          <!-- 팔로워 수 + 모달 -->
           <button
             type="button"
             onclick="openFollowModal('followers')"
@@ -64,6 +72,7 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
             <p class="text-sm opacity-80">팔로워</p>
           </button>
 
+          <!-- 팔로잉 수 + 모달 -->
           <button
             type="button"
             onclick="openFollowModal('followings')"
@@ -232,7 +241,7 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
 <!-- ===== 게시글 상세 모달 ===== -->
 <div
   id="postModal"
-  class="hidden fixed inset-0 bg-black/50 flex justify-center items-center p-4 z-50"
+  class="hidden fixed inset-0 bg-black/50 snel flex justify-center items-center p-4 z-50"
   onclick="overlayClose(event)"
 >
   <div
@@ -265,9 +274,44 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
       <!-- 텍스트 / 버튼 / 댓글 영역 -->
       <div class="p-6 flex flex-col justify-between">
         <div>
-          <h3 class="text-2xl font-bold text-[#D2691E]" id="modalTitle"></h3>
-          <p class="text-sm text-gray-500 mt-1" id="modalWriter"></p>
-          <p class="mt-3 text-[#6B4F2A]" id="modalContent"></p>
+          <!-- 보기 영역 -->
+          <div id="modalViewArea">
+            <h3 class="text-2xl font-bold text-[#D2691E]" id="modalTitle"></h3>
+            <p class="text-sm text-gray-500 mt-1" id="modalWriter"></p>
+            <p class="mt-3 text-[#6B4F2A]" id="modalContent"></p>
+          </div>
+
+          <!-- 수정 영역 (숨김) -->
+          <div id="modalEditArea" class="hidden space-y-2">
+            <input
+              id="modalEditTitle"
+              type="text"
+              class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF69B4]"
+              placeholder="제목을 입력하세요"
+            />
+            <textarea
+              id="modalEditContent"
+              rows="4"
+              class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF69B4]"
+              placeholder="내용을 입력하세요"
+            ></textarea>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                onclick="submitPostEdit()"
+                class="px-4 py-2 bg-[#FF69B4] text-white rounded-lg text-sm font-bold border-2 border-[#D2691E]"
+              >
+                수정 저장
+              </button>
+              <button
+                type="button"
+                onclick="cancelPostEdit()"
+                class="px-4 py-2 bg-white text-[#8B4513] rounded-lg text-sm font-bold border border-[#D2691E]"
+              >
+                취소
+              </button>
+            </div>
+          </div>
 
           <!-- 좋아요 버튼 (댓글 위) -->
           <div class="mt-4">
@@ -310,11 +354,18 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
           </button>
         </div>
 
-        <!-- 게시글 삭제 (작성자만 노출) -->
-        <div id="modalDeleteArea" class="mt-4 hidden">
+        <!-- 게시글 수정/삭제 (작성자만 노출) -->
+        <div id="modalOwnerActions" class="mt-4 hidden flex gap-3 items-center">
+          <button
+            type="button"
+            id="editPostBtn"
+            class="text-sm px-3 py-2 rounded-lg bg-[#FF69B4] text-white font-bold border border-[#D2691E]"
+          >
+            게시글 수정
+          </button>
           <form method="post" id="deletePostForm">
             {% csrf_token %}
-            <button class="text-red-600 font-bold">게시글 삭제</button>
+            <button class="text-red-600 font-bold text-sm">게시글 삭제</button>
           </form>
         </div>
       </div>
@@ -374,6 +425,11 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
   let selectedImg = null;
   const CSRF_TOKEN = "{{ csrf_token }}";
 
+  function goToProfile(nickname) {
+    const encoded = encodeURIComponent(nickname);
+    window.location.href = `/users/profile/${encoded}/`;
+  }
+
   /* ==============================
      오버레이(배경) 클릭 시 모달 닫기
   ============================== */
@@ -409,12 +465,10 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
       followerCount.textContent = data.follower_count;
 
       if (data.is_following) {
-        // ✅ 이제 팔로우 중
         btn.textContent = "✔ 팔로잉";
         btn.className =
           "mt-4 px-6 py-3 text-lg font-bold rounded-xl pixel-corners border-3 bg-white text-[#D2691E] border-[#D2691E]";
       } else {
-        // ✅ 언팔로우 상태
         btn.textContent = "+ 팔로우";
         btn.className =
           "mt-4 px-6 py-3 text-lg font-bold rounded-xl pixel-corners border-3 bg-[#FF69B4] text-white border-[#D2691E]";
@@ -458,7 +512,6 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
         }
       }
 
-      // 숫자 동기화
       count.textContent = data.like_count;
       if (cardEl) {
         cardEl.dataset.likes = data.like_count;
@@ -490,6 +543,20 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
   /* ==============================
      게시글 상세보기 모달 열기
   ============================== */
+  function resetPostEditMode() {
+    document.getElementById("modalViewArea").classList.remove("hidden");
+    document.getElementById("modalEditArea").classList.add("hidden");
+  }
+
+  function enterPostEditMode() {
+    document.getElementById("modalViewArea").classList.add("hidden");
+    document.getElementById("modalEditArea").classList.remove("hidden");
+  }
+
+  function cancelPostEdit() {
+    resetPostEditMode();
+  }
+
   function openPostModal(el) {
     const id = el.dataset.id;
     currentPostId = id;
@@ -516,10 +583,15 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
       modalPlaceholder.classList.remove("hidden");
     }
 
+    // 보기 영역 데이터
     document.getElementById("modalTitle").textContent = title;
     document.getElementById("modalWriter").textContent = "@" + writerUser;
     document.getElementById("modalContent").textContent = content;
     document.getElementById("modalLikeCount").textContent = likeCount;
+
+    // 수정 영역 기본값
+    document.getElementById("modalEditTitle").value = title;
+    document.getElementById("modalEditContent").value = content;
 
     const icon = document.getElementById("modalLikeIcon");
     const btn = document.getElementById("modalLikeBtn");
@@ -536,15 +608,19 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
 
     btn.setAttribute("onclick", `toggleModalLike(${id})`);
 
-    const deleteArea = document.getElementById("modalDeleteArea");
+    const ownerActions = document.getElementById("modalOwnerActions");
     if ("{{ user.username }}" === writerUser) {
-      deleteArea.classList.remove("hidden");
+      ownerActions.classList.remove("hidden");
       document.getElementById(
         "deletePostForm"
       ).action = `/users/post/${id}/delete/`;
+      document.getElementById("editPostBtn").onclick = enterPostEditMode;
     } else {
-      deleteArea.classList.add("hidden");
+      ownerActions.classList.add("hidden");
     }
+
+    // 보기 모드로 초기화
+    resetPostEditMode();
 
     // 댓글 로딩
     loadComments(id);
@@ -555,6 +631,112 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
     if (input) input.value = "";
     document.getElementById("modalComments").innerHTML = "";
     document.getElementById("postModal").classList.add("hidden");
+  }
+
+  /* ==============================
+     게시글 수정 저장 AJAX
+  ============================== */
+  async function submitPostEdit() {
+    if (!currentPostId) return;
+
+    const titleInput = document.getElementById("modalEditTitle");
+    const contentInput = document.getElementById("modalEditContent");
+
+    const title = titleInput.value.trim();
+    const content = contentInput.value.trim();
+
+    if (!title) {
+      alert("제목을 입력하세요.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/users/post/${currentPostId}/update/ajax/`, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": CSRF_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title, content }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "게시글 수정에 실패했습니다.");
+        return;
+      }
+
+      document.getElementById("modalTitle").textContent = data.post.title;
+      document.getElementById("modalContent").textContent = data.post.content;
+
+      const cardEl = document.querySelector(
+        `.post-card[data-id="${currentPostId}"]`
+      );
+      if (cardEl) {
+        cardEl.dataset.title = data.post.title;
+        cardEl.dataset.content = data.post.content;
+
+        const titleEl = cardEl.querySelector("h4");
+        const contentEl = cardEl.querySelector("p.text-sm");
+        if (titleEl) titleEl.textContent = data.post.title;
+        if (contentEl) contentEl.textContent = data.post.content;
+      }
+
+      resetPostEditMode();
+      alert("게시글이 수정되었습니다.");
+    } catch (e) {
+      console.error("게시글 수정 에러:", e);
+      alert("게시글 수정 중 오류가 발생했습니다.");
+    }
+  }
+
+  /* ==============================
+     댓글 렌더링 공통 함수
+  ============================== */
+  function renderComment(c) {
+    const wrap = document.getElementById("modalComments");
+    const div = document.createElement("div");
+    div.className = "flex items-start gap-2";
+    div.dataset.commentId = c.id;
+
+    let ownerButtons = "";
+    if (c.is_owner) {
+      ownerButtons = `
+      <div class="mt-1 space-x-2 text-[11px] text-gray-400">
+        <button type="button"
+                onclick="startEditComment(${c.id})"
+                class="hover:underline">
+          수정
+        </button>
+        <button type="button"
+                onclick="deleteComment(${c.id})"
+                class="hover:underline text-red-500">
+          삭제
+        </button>
+      </div>
+    `;
+    }
+
+    div.innerHTML = `
+    <div class="flex-1">
+      <a
+        href="/users/profile/${encodeURIComponent(c.writer_nickname)}/"
+        class="font-semibold text-[#D2691E] text-xs hover:underline"
+      >
+        @${c.writer_nickname}
+      </a>
+      <p id="commentContent-${c.id}"
+         class="text-sm text-[#6B4F2A] break-words">
+        ${c.content}
+      </p>
+      <p class="text-[10px] text-gray-400">${c.created_at}</p>
+      <div id="commentButtons-${c.id}">
+        ${ownerButtons}
+      </div>
+    </div>
+  `;
+
+    wrap.appendChild(div);
   }
 
   /* ==============================
@@ -576,20 +758,7 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
       }
 
       data.comments.forEach((c) => {
-        const div = document.createElement("div");
-        div.className = "flex items-start gap-2";
-        div.innerHTML = `
-          <div class="flex-1">
-            <a href="/users/profile/${encodeURIComponent(c.writer_nickname)}/"
-              class="font-semibold text-[#D2691E] text-xs hover:underline"
-            >
-              @${c.writer_nickname}
-            </a>
-            <p class="text-sm text-[#6B4F2A] break-words">${c.content}</p>
-            <p class="text-[10px] text-gray-400">${c.created_at}</p>
-          </div>
-        `;
-        wrap.appendChild(div);
+        renderComment(c); // 🔥 여기
       });
     } catch (e) {
       console.error("댓글 로딩 에러:", e);
@@ -623,29 +792,127 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
       }
 
       input.value = "";
-
-      const wrap = document.getElementById("modalComments");
-      const c = data.comment;
-      const div = document.createElement("div");
-      div.className = "flex items-start gap-2";
-
-      div.innerHTML = `
-        <div class="flex-1">
-          <a
-            href="/users/profile/${encodeURIComponent(c.writer_nickname)}/"
-            class="font-semibold text-[#D2691E] text-xs hover:underline"
-          >
-            @${c.writer_nickname}
-          </a>
-          <p class="text-sm text-[#6B4F2A] break-words">${c.content}</p>
-          <p class="text-[10px] text-gray-400">${c.created_at}</p>
-        </div>
-      `;
-      wrap.appendChild(div);
+      renderComment(data.comment); // 🔥 새 댓글도 동일하게 렌더
     } catch (e) {
       console.error("댓글 등록 에러:", e);
       alert("댓글 등록 중 오류가 발생했습니다.");
     }
+  }
+
+  /* ==============================
+     댓글 수정/삭제 JS
+  ============================== */
+  function startEditComment(commentId) {
+    const contentEl = document.getElementById(`commentContent-${commentId}`);
+    const oldContent = contentEl.textContent;
+
+    // input으로 전환
+    contentEl.innerHTML = `
+    <input id="editInput-${commentId}"
+           type="text"
+           value="${oldContent}"
+           class="w-full px-2 py-1 border rounded text-sm">
+  `;
+
+    // 수정 / 취소 버튼 생성
+    const btnArea = document.getElementById(`commentButtons-${commentId}`);
+    btnArea.innerHTML = `
+    <button onclick="saveEditComment(${commentId})"
+            class="text-xs text-green-600 font-bold hover:underline">
+      저장
+    </button>
+    <button onclick="cancelEditComment(${commentId}, '${oldContent.replace(
+      /'/g,
+      "\\'"
+    )}')"
+            class="text-xs text-gray-500 hover:underline">
+      취소
+    </button>
+  `;
+  }
+
+  async function saveEditComment(commentId) {
+    const inputEl = document.getElementById(`editInput-${commentId}`);
+    const newContent = inputEl.value.trim();
+    if (!newContent) return;
+
+    try {
+      const res = await fetch(`/users/comment/${commentId}/edit/ajax/`, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": CSRF_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: newContent }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "수정 실패");
+        return;
+      }
+
+      const contentEl = document.getElementById(`commentContent-${commentId}`);
+      contentEl.textContent = newContent;
+
+      // 버튼 상태 복구
+      document.getElementById(`commentButtons-${commentId}`).innerHTML = `
+      <button onclick="startEditComment(${commentId})"
+              class="hover:underline text-xs">
+        수정
+      </button>
+      <button onclick="deleteComment(${commentId})"
+              class="hover:underline text-xs text-red-500">
+        삭제
+      </button>
+    `;
+    } catch (e) {
+      console.error("댓글 수정 실패:", e);
+    }
+  }
+
+  function cancelEditComment(commentId, oldContent) {
+    const contentEl = document.getElementById(`commentContent-${commentId}`);
+    contentEl.textContent = oldContent;
+
+    document.getElementById(`commentButtons-${commentId}`).innerHTML = `
+    <button onclick="startEditComment(${commentId})"
+            class="hover:underline text-xs">
+      수정
+    </button>
+    <button onclick="deleteComment(${commentId})"
+            class="hover:underline text-xs text-red-500">
+      삭제
+    </button>
+  `;
+  }
+
+  function deleteComment(commentId) {
+    if (!confirm("정말로 이 댓글을 삭제하시겠습니까?")) return;
+
+    fetch(`/users/comment/${commentId}/delete/ajax/`, {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": CSRF_TOKEN,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) {
+          alert(data.error || "댓글 삭제에 실패했습니다.");
+          return;
+        }
+
+        const commentEl = document.querySelector(
+          `div[data-comment-id="${commentId}"]`
+        );
+        if (commentEl) {
+          commentEl.remove();
+        }
+      })
+      .catch((e) => {
+        console.error("댓글 삭제 에러:", e);
+      });
   }
 
   /* ==============================
@@ -771,9 +1038,9 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
     }
   });
 
-  /* ==================================================*/
-
-  //  팔로우/팔로잉 모달
+  /* ==============================
+     팔로우/팔로잉 모달
+  ============================== */
   function closeFollowModal() {
     const modal = document.getElementById("followModal");
     if (modal) modal.classList.add("hidden");
@@ -828,17 +1095,17 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
           : `<div class="w-8 h-8 rounded-full bg-[#FFE8CC] flex items-center justify-center text-lg">🍞</div>`;
 
         div.innerHTML = `
-        ${profileImg}
-        <div class="flex-1">
-          <a
-            href="/users/profile/${encodeURIComponent(u.nickname)}/"
-            class="font-semibold text-[#D2691E] hover:underline text-sm"
-          >
-            ${u.nickname}
-          </a>
-          <p class="text-[11px] text-gray-500">@${u.username}</p>
-        </div>
-      `;
+          ${profileImg}
+          <div class="flex-1">
+            <a
+              href="/users/profile/${encodeURIComponent(u.nickname)}/"
+              class="font-semibold text-[#D2691E] hover:underline text-sm"
+            >
+              ${u.nickname}
+            </a>
+            <p class="text-[11px] text-gray-500">@${u.username}</p>
+          </div>
+        `;
 
         listEl.appendChild(div);
       });
@@ -848,7 +1115,5 @@ target_user.nickname }} - 프로필{% endblock title %} {% block content %}
         '<p class="text-red-500 text-xs">목록을 불러오는 중 오류가 발생했습니다.</p>';
     }
   }
-
-  /*========================================== */
 </script>
 {% endblock extra_script %}

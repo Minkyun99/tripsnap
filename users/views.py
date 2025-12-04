@@ -4,6 +4,9 @@ from django.contrib import messages
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth import update_session_auth_hash
+from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
 from django.http import JsonResponse
 from django.utils import timezone
@@ -156,6 +159,12 @@ def user_profile(request, nickname=None):
 
     profile, _ = Profile.objects.get_or_create(user=target_user)
 
+    liked_post_ids = []
+    if request.user.is_authenticated:
+        liked_post_ids = list(
+            request.user.likes.values_list("post_id", flat=True)
+        )
+
     context = {
         "target_user": target_user,
         "profile": profile,
@@ -164,6 +173,7 @@ def user_profile(request, nickname=None):
         "is_following": is_following,
         "follower_count": follower_count,
         "following_count": following_count,
+        "liked_post_ids": liked_post_ids,
     }
 
     return render(request, "user/profile.html", context)
@@ -263,59 +273,108 @@ def post_like_toggle_ajax(request, post_id):
 def post_comments_ajax(request, post_id):
     """
     /users/post/<post_id>/comments/ajax/
-    - GET  : 댓글 목록 조회 → {comments: [...]}
-    - POST : 댓글 작성      → {success: true, comment: {...}}
+    - GET : 댓글 목록 조회
+    - POST: 댓글 작성
     """
     post = get_object_or_404(Post, id=post_id)
 
-    # ---------- GET: 댓글 목록 ----------
+    # ===== GET: 댓글 목록 =====
     if request.method == "GET":
-        comments = (
-            Comment.objects
-            .filter(post=post)
-            .select_related("user")
-            .order_by("created_at")
-        )
+        # Comment 모델: user(FK), post(FK), content, created_at ...
+        comments = post.comments.select_related("user").order_by("created_at")
 
-        data = []
-        for c in comments:
-            data.append({
-                "id": c.id,
-                "writer_nickname": getattr(c.user, "nickname", c.user.username),
-                "content": c.content,
-                "created_at": timezone.localtime(c.created_at).strftime("%Y-%m-%d %H:%M"),
-            })
+        return JsonResponse({
+            "comments": [
+                {
+                    "id": c.id,
+                    "writer_nickname": c.user.nickname,  # 🔥 프론트에서 프로필 링크에 사용
+                    "content": c.content,
+                    "created_at": c.created_at.strftime("%Y-%m-%d %H:%M"),
+                    "is_owner": (request.user == c.user),  # 🔥 수정/삭제 버튼 노출 여부
+                }
+                for c in comments
+            ]
+        })
 
-        return JsonResponse({"comments": data})
-
-    # ---------- POST: 댓글 작성 ----------
+    # ===== POST: 새 댓글 작성 =====
     try:
         body = json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
-        return JsonResponse({"success": False, "error": "잘못된 요청입니다."}, status=400)
+    except Exception:
+        body = {}
 
     content = (body.get("content") or "").strip()
     if not content:
-        return JsonResponse({"success": False, "error": "내용을 입력해주세요."}, status=400)
+        return JsonResponse(
+            {"success": False, "error": "내용을 입력하세요."},
+            status=400,
+        )
 
     comment = Comment.objects.create(
-        user=request.user,
         post=post,
+        user=request.user,   # 🔥 writer가 아니라 user 입니다
         content=content,
     )
 
-    comment_data = {
-        "id": comment.id,
-        "writer_nickname": getattr(comment.user, "nickname", comment.user.username),
-        "content": comment.content,
-        "created_at": timezone.localtime(comment.created_at).strftime("%Y-%m-%d %H:%M"),
-    }
+    return JsonResponse({
+        "success": True,
+        "comment": {
+            "id": comment.id,
+            "writer_nickname": comment.user.nickname,
+            "content": comment.content,
+            "created_at": comment.created_at.strftime("%Y-%m-%d %H:%M"),
+            "is_owner": True,   # 방금 작성한 댓글은 무조건 본인
+        }
+    })
+
+# =========================================================
+# 댓글 삭제 (AJAX 전용)
+# =========================================================
+
+@login_required
+@require_POST
+def comment_delete_ajax(request, comment_id):
+    """
+    /users/comment/<comment_id>/delete/ajax/
+    - 본인 댓글만 삭제 가능
+    """
+    comment = get_object_or_404(Comment, id=comment_id, user=request.user)
+    comment.delete()
+    return JsonResponse({"success": True, "id": comment_id})
+
+# =========================================================
+# 댓글 수정 (AJAX 전용)
+# =========================================================
+
+@login_required
+@require_http_methods(["POST"])
+def comment_update_ajax(request, comment_id):
+    """
+    /users/comment/<comment_id>/edit/ajax/
+    - 본인 댓글만 수정 가능
+    """
+    comment = get_object_or_404(Comment, id=comment_id, user=request.user)
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        body = {}
+
+    new_content = (body.get("content") or "").strip()
+    if not new_content:
+        return JsonResponse(
+            {"success": False, "error": "내용을 입력하세요."},
+            status=400,
+        )
+
+    comment.content = new_content
+    comment.save(update_fields=["content", "updated_at"])
 
     return JsonResponse({
         "success": True,
-        "comment": comment_data,
+        "id": comment.id,
+        "content": comment.content,
+        "updated_at": comment.updated_at.strftime("%Y-%m-%d %H:%M"),
     })
-
 # =========================================================
 #  팔로우 / 언팔로우 (AJAX 전용)
 # =========================================================
@@ -385,7 +444,7 @@ def follow_toggle(request, nickname):
 
 
 # =========================================================
-#  게시글 작성 / 삭제
+#  게시글 작성 / 수정 / 삭제
 # =========================================================
 @login_required
 @require_POST
@@ -408,6 +467,38 @@ def post_create(request):
 
     # 작성 후 내 프로필로 이동
     return redirect('users:user_profile')
+
+@login_required
+@require_POST
+def post_update_ajax(request, post_id):
+    """
+    게시글 제목/내용 수정 (작성자만) – 모달에서 사용
+    """
+    post = get_object_or_404(Post, id=post_id, writer=request.user)
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"success": False, "error": "잘못된 요청입니다."}, status=400)
+
+    title = body.get("title", "").strip()
+    content = body.get("content", "").strip()
+
+    if not title:
+        return JsonResponse({"success": False, "error": "제목을 입력하세요."})
+
+    post.title = title
+    post.content = content
+    post.save(update_fields=["title", "content"])
+
+    return JsonResponse({
+        "success": True,
+        "post": {
+            "id": post.id,
+            "title": post.title,
+            "content": post.content,
+        }
+    })
 
 
 @login_required
@@ -616,3 +707,29 @@ def profile_search(request):
 
     return redirect("users:profile_detail", nickname=user.nickname)
 
+# ========================================================
+# 설정 페이지
+# ========================================================
+
+@login_required
+def settings_view(request):
+    """
+    설정 페이지 (비밀번호 변경 + 회원 탈퇴 버튼)
+    """
+    if request.method == "POST":
+        form = PasswordChangeForm(user=request.user, data=request.POST)
+        if form.is_valid():
+            user = form.save()
+            # 비밀번호 바꾼 후에도 세션 유지
+            update_session_auth_hash(request, user)
+            messages.success(request, "비밀번호가 성공적으로 변경되었습니다.")
+            return redirect('users:settings')
+        else:
+            messages.error(request, "입력하신 내용을 다시 확인해주세요.")
+    else:
+        form = PasswordChangeForm(user=request.user)
+
+    context = {
+        "form": form,
+    }
+    return render(request, "user/setting.html", context)

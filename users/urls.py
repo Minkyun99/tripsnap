@@ -4,6 +4,10 @@ from . import views
 app_name = 'users'
 
 urlpatterns = [
+
+    # ✅ 설정 페이지
+    path('settings/', views.settings_view, name='settings'),
+    
     # ===== 프로필 =====
     path('profile/', views.user_profile, name='user_profile'),
     path('profile/search/', views.profile_search, name='profile_search'),  # ✅ search는 <nickname>보다 위!
@@ -33,16 +37,22 @@ urlpatterns = [
     path('post/create/', views.post_create, name='post_create'),
     path('post/<int:post_id>/delete/', views.post_delete, name='post_delete'),
 
+    # 🔹 게시글 수정 (AJAX)
+    path('post/<int:post_id>/update/ajax/', views.post_update_ajax, name='post_update_ajax'),
+
     # 좋아요 
     path('post/<int:post_id>/like-toggle/', views.post_like_toggle, name='post_like_toggle'),
     # 좋아요 (AJAX 전용)
     path('post/<int:post_id>/like-toggle/ajax/', views.post_like_toggle_ajax, name='post_like_toggle_ajax'),
 
     # 댓글
-    path('post/<int:post_id>/comment/', views.comment_create, name='comment_create'),
-    # 댓글 (AJAX 전용)
-    path('post/<int:post_id>/comments/ajax/', views.post_comments_ajax, name='post_comments_ajax'),
+    path("post/<int:post_id>/comment/", views.comment_create, name="comment_create"),
+    path("post/<int:post_id>/comments/ajax/", views.post_comments_ajax, name="post_comments_ajax"),
 
-    # 댓글 삭제
-    path('comment/<int:comment_id>/delete/', views.comment_delete, name='comment_delete'),
+    # 🔹 댓글 수정/삭제 (AJAX)
+    path("comment/<int:comment_id>/edit/ajax/", views.comment_update_ajax, name="comment_update_ajax"),
+    path("comment/<int:comment_id>/delete/ajax/", views.comment_delete_ajax, name="comment_delete_ajax"),
+
+
+
 ]
