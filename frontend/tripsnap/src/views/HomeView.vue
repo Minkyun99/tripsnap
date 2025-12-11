@@ -1,3 +1,4 @@
+<!-- src/views/HomeView.vue -->
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -18,6 +19,10 @@ const goProfile = () => {
   router.push({ name: 'profile' })
 }
 
+const goChatbot = () => {
+  router.push({ name: 'chatbot' })
+}
+
 const handleKakaoLogin = () => {
   userStore.startKakaoLogin()
 }
@@ -34,9 +39,15 @@ const handleKakaoLogin = () => {
 
         <p class="home-subtitle">{{ displayName }}님의 취향에 맞는 빵집을 추천합니다</p>
 
-        <button type="button" class="home-btn-profile pixel-corners" @click="goProfile">
-          내 프로필 보기
-        </button>
+        <div class="home-actions">
+          <button type="button" class="home-btn-profile pixel-corners" @click="goProfile">
+            내 프로필 보기
+          </button>
+
+          <button type="button" class="home-btn-chat pixel-corners" @click="goChatbot">
+            챗봇 대화
+          </button>
+        </div>
       </div>
 
       <!-- 비로그인 상태 -->
@@ -76,6 +87,8 @@ const handleKakaoLogin = () => {
 </template>
 
 <style scoped lang="scss">
+@use 'sass:color';
+
 $ts-border-brown: #d2691e;
 $ts-text-brown: #8b4513;
 
@@ -123,7 +136,14 @@ $ts-text-brown: #8b4513;
   margin-bottom: 2.5rem;
 }
 
-/* 로그인 상태 버튼 (내 프로필 보기) */
+/* 버튼 영역 */
+.home-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+/* 로그인 상태: 내 프로필 버튼 */
 .home-btn-profile {
   display: inline-block;
   padding: 1rem 2.5rem;
@@ -137,12 +157,34 @@ $ts-text-brown: #8b4513;
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease;
-  box-shadow: 0 8px 0 darken(#ff69b4, 12%);
+  box-shadow: 0 8px 0 color.adjust(#ff69b4, $lightness: -15%, $saturation: 5%);
 }
 
 .home-btn-profile:hover {
   transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 10px 0 darken(#ff69b4, 15%);
+  box-shadow: 0 10px 0 color.adjust(#ff69b4, $lightness: -18%, $saturation: 5%);
+}
+
+/* 로그인 상태: 챗봇 버튼 */
+.home-btn-chat {
+  display: inline-block;
+  padding: 1rem 2.2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  background-color: #ffefdb;
+  color: $ts-text-brown;
+  border-radius: 0.85rem;
+  border: 3px solid $ts-border-brown;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  box-shadow: 0 8px 0 color.adjust(#ffefdb, $lightness: -15%, $saturation: -5%);
+}
+
+.home-btn-chat:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 10px 0 color.adjust(#ffefdb, $lightness: -18%, $saturation: -5%);
 }
 
 /* 비로그인 상태 카카오 버튼 */
@@ -156,7 +198,7 @@ $ts-text-brown: #8b4513;
   border-radius: 0.9rem;
   border: 3px solid $ts-border-brown;
   cursor: pointer;
-  box-shadow: 0 8px 0 #c4a300;
+  box-shadow: 0 8px 0 color.adjust(#c4a300, $lightness: -5%, $saturation: 5%);
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease;
@@ -164,7 +206,7 @@ $ts-text-brown: #8b4513;
 
 .home-btn-kakao:hover {
   transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 10px 0 #c4a300;
+  box-shadow: 0 10px 0 color.adjust(#c4a300, $lightness: -10%, $saturation: 5%);
 }
 
 /* 기능 카드 영역 */
