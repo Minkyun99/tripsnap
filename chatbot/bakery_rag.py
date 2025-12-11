@@ -5,11 +5,11 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
-import openai
+from openai import OpenAI
 from tqdm import tqdm
 
 # ----------------- 0. 설정 -----------------
-DATA_FILE = "dessert_filtered_with_ratings.json"
+DATA_FILE = "./chatbot/dessert.json"
 VECTOR_DB_PATH = "./bakery_vectordb"
 COLLECTION_NAME = "bakery_collection"
 
@@ -417,8 +417,19 @@ class BakeryRAGSystem:
         ])
         
         if use_openai and OPENAI_API_KEY != "your-api-key-here":
-            # OpenAI API 사용
-            openai.api_key = OPENAI_API_KEY
+            # GMS API 사용
+            
+            # GMS 프록시 엔드포인트 설정
+            GMS_BASE_URL = "https://gms.ssafy.io/gmsapi/api.openai.com/v1"
+            
+            # OpenAI 클라이언트 초기화 시 base_url과 api_key 설정
+            client = OpenAI(
+                api_key=OPENAI_API_KEY,  # 환경변수에 저장된 GMS_KEY 사용
+                base_url=GMS_BASE_URL,   # GMS 프록시 주소 설정
+            )
+            
+            # 모델은 gpt-4.1-nano로 유지 (GMS에서 해당 모델을 지원한다고 가정)
+            MODEL_NAME = "gpt-4.1-nano"
             
             prompt = f"""당신은 친절한 빵집 추천 전문가입니다. 
 사용자의 질문에 대해 검색된 빵집 정보를 바탕으로 자연스럽고 친근한 답변을 작성해주세요.
@@ -430,10 +441,12 @@ class BakeryRAGSystem:
 
 위 정보를 바탕으로 사용자에게 빵집을 추천하는 답변을 작성해주세요. 
 각 빵집의 특징과 장점을 구체적으로 설명해주세요."""
+            prompt = prompt.encode('utf-8', 'ignore').decode('utf-8')
 
             try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
+                print("Debug checkpoint 1")
+                response = client.chat.completions.create(
+                    model="gpt-4.1-nano",
                     messages=[
                         {"role": "system", "content": "당신은 친절한 빵집 추천 전문가입니다."},
                         {"role": "user", "content": prompt}
@@ -441,6 +454,7 @@ class BakeryRAGSystem:
                     temperature=0.7,
                     max_tokens=500
                 )
+                print("Debug checkpoint 2")
                 return response.choices[0].message.content
             except Exception as e:
                 print(f"⚠️ OpenAI API 오류: {e}")

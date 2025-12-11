@@ -22,6 +22,7 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     "daphne",
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -43,6 +44,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -147,14 +149,18 @@ REST_AUTH = {
 # ===============================================
 # ALLAUTH 설정
 # ===============================================
-ACCOUNT_AUTHENTICATION_METHOD = 'email' 
-ACCOUNT_EMAIL_REQUIRED = True         
-ACCOUNT_UNIQUE_EMAIL = True           
-ACCOUNT_USERNAME_REQUIRED = False     
+ACCOUNT_LOGIN_METHODS = {"email"}  # 이메일로 로그인
+
+ACCOUNT_SIGNUP_FIELDS = [
+    "email*",
+    "password1*",
+    "password2*",
+]    
 ACCOUNT_LOGOUT_ON_GET = True
 ACCOUNT_EMAIL_VERIFICATION = 'none' 
 
-LOGIN_REDIRECT_URL = '/'
+
+LOGIN_REDIRECT_URL = '/auth/kakao/complete'
 ACCOUNT_SIGNUP_REDIRECT_URL = '/'
 ACCOUNT_LOGOUT_REDIRECT_URL = '/'
 
@@ -232,3 +238,18 @@ OPENAI_API_KEY = env.str("OPENAI_API_KEY", default=None)
 SESSION_COOKIE_AGE = 86400  # 1일
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+
+# Vue dev 서버에서 오는 요청 허용
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# 쿠키/세션을 포함한 요청 허용 (credentials: 'include' 사용 중)
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
