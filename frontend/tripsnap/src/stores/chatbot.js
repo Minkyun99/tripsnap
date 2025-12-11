@@ -1,78 +1,52 @@
 // src/stores/chatbot.js
 import { defineStore } from 'pinia'
 
-const API_BASE = 'http://localhost:8000'
-
-export const useChatbotStore = defineStore('chatbot', {
+export const useChatStore = defineStore('chatbot', {
   state: () => ({
-    messages: [],        // { role: 'user'|'bot'|'system', text: string }
+    // 백엔드 Conversation.id
     conversationId: null,
-    isLoading: false,
-    error: null,
-    lastResults: [],     // RAG 결과 리스트 등
+    // 채팅 메시지 목록
+    // 각 메시지: { id: number, role: 'user' | 'bot', text: string }
+    messages: [],
   }),
+
   actions: {
+    /**
+     * 키워드 선택 → /chatbot/init/ 응답으로 받은 초기 대화 세팅
+     * @param {string|number} conversationId
+     * @param {Array<{role: string, content: string}>} initialMessages
+     */
+    setInitialConversation(conversationId, initialMessages) {
+      this.conversationId = conversationId
+
+      let idCounter = 1
+      this.messages = (initialMessages || []).map((m) => ({
+        id: idCounter++,
+        role: m.role, // 'user' 또는 'bot' 형태로 들어온다고 가정
+        text: m.content, // 내용
+      }))
+    },
+
+    /**
+     * 메시지 하나 추가
+     * @param {'user'|'bot'} role
+     * @param {string} text
+     */
+    appendMessage(role, text) {
+      const nextId = (this.messages[this.messages.length - 1]?.id || 0) + 1
+      this.messages.push({
+        id: nextId,
+        role,
+        text,
+      })
+    },
+
+    /**
+     * 대화 리셋 (새 키워드 선택 시 등)
+     */
     reset() {
-      this.messages = []
       this.conversationId = null
-      this.lastResults = []
-      this.error = null
-    },
-
-    addMessage(role, text) {
-      this.messages.push({ role, text })
-    },
-
-    async sendMessage({ text, trigger = true }) {
-      if (!text?.trim()) return
-
-      // 1) 사용자 메시지를 먼저 로컬에 추가
-      this.addMessage('user', text)
-
-      this.isLoading = true
-      this.error = null
-      try {
-        const payload = {
-          message: text,
-          trigger,                         // '추천' 강제 트리거 플래그
-          conversation_id: this.conversationId,
-        }
-
-        const res = await fetch(`${API_BASE}/chatbot/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(payload),
-        })
-        if (!res.ok) {
-          // 401이면 로그인 필요
-          if (res.status === 401) {
-            throw new Error('로그인이 필요합니다.')
-          }
-          throw new Error('챗봇 응답 실패')
-        }
-        const data = await res.json()
-
-        // views.chat 기준:
-        // - 추천을 호출 안 하면: { "saved": True }
-        // - 호출하면: { "llm_response": "...", "results": [...] }
-
-        if (data.llm_response) {
-          this.addMessage('bot', data.llm_response)
-        }
-        if (data.results) {
-          this.lastResults = data.results
-        }
-
-        // conversation_id를 응답에 추가하셨다면 여기서 같이 관리 가능
-        if (data.conversation_id) {
-          this.conversationId = data.conversation_id
-        }
-      } catch (err) {
-        this.error = err.message ?? '챗봇 통신 중 오류'
-      } finally {
-        this.isLoading = false
-      }
+      this.messages = []
     },
   },
 })

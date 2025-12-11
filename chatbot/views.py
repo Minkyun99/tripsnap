@@ -1,5 +1,7 @@
 from django.shortcuts import render, redirect
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from django.views.decorators.csrf import csrf_exempt
+
 from rest_framework.response import Response
 from rest_framework import status
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -9,6 +11,9 @@ import json
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 
+# 챗봇 서버와 vue를 연결하기 위한 views.py 추가 설정
+from rest_framework.permissions import IsAuthenticated  # 또는 AllowAny
+from .serializers import ChatInitSerializer
 
 # `chatbot/` 루트 뷰: 로그인된 사용자가 키워드 선택 페이지로 이동합니다.
 @login_required
@@ -149,3 +154,62 @@ def chat(request):
 
     # 허용되지 않는 HTTP 메서드에 대해서는 405 응답을 반환합니다.
     return Response({'error': 'Method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+
+
+# 챗봇 화면 진입 전, 검색 키워드 선택을 위한 views.py 구성
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])  
+def chat_init(request):
+    """
+    Vue에서 키워드 선택 후 호출하는 초기화 API
+    POST /chatbot/init/
+    body: { preference, region?, dates?, transport? }
+    """
+    serializer = ChatInitSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    preference = serializer.validated_data['preference']
+    region = serializer.validated_data.get('region', '')
+    dates = serializer.validated_data.get('dates', '')
+    transport = serializer.validated_data.get('transport', '')
+
+    # 새 Conversation 생성
+    conv = Conversation.objects.create(user=request.user)
+
+    # 시스템 메타 메시지 저장 (기존 keyword_selection → room 진입 때 쓰던 것과 동일한 포맷)
+    meta = {
+      'preference': preference,
+      'region': region,
+      'dates': dates,
+      'transport': transport,
+    }
+    Message.objects.create(
+        conversation=conv,
+        sender=Message.SENDER_SYSTEM,
+        content='__META__:' + json.dumps(meta, ensure_ascii=False),
+    )
+
+    # 초기 봇 메시지 2개
+    summary = f"선택하신 키워드: {preference}"
+    prompt = "원하시는 것을 더 자세히 설명해주시겠어요? 그냥 추천해달라고 하시면 바로 추천을 시작할게요."
+
+    Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=summary)
+    Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=prompt)
+
+    return Response(
+        {
+            "conversation_id": str(conv.id),
+            "preference": preference,
+            "region": region,
+            "dates": dates,
+            "transport": transport,
+            "initial_messages": [
+                {"role": "bot", "content": summary},
+                {"role": "bot", "content": prompt},
+            ],
+        },
+        status=status.HTTP_201_CREATED,
+    )

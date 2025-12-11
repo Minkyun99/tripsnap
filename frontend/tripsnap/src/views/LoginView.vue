@@ -15,7 +15,7 @@ const handleSubmit = async () => {
   errorMessage.value = ''
   try {
     await userStore.login({ email: email.value, password: password.value })
-    router.push('/chatbot')
+    router.push('/')
   } catch (e) {
     errorMessage.value = userStore.error || '로그인에 실패했습니다.'
   }
