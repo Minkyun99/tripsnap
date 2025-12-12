@@ -6,10 +6,28 @@ import router from './router'
 
 import './assets/style.scss'
 
-const app = createApp(App)
+const API_BASE = import.meta.env.VITE_API_KEY
 
-const pinia = createPinia()
-app.use(pinia)
-app.use(router)
+async function initCsrf() {
+  try {
+    await fetch(`${API_BASE}/api/csrf`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+  } catch (err) {
+    console.error('CSRF 초기화 실패 : ', err)
+  }
+}
 
-app.mount('#app')
+async function bootstrap() {
+  await initCsrf()
+
+  const app = createApp(App)
+
+  const pinia = createPinia()
+  app.use(pinia)
+  app.use(router)
+  app.mount('#app')
+}
+
+bootstrap()

@@ -4,62 +4,126 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
 import { useChatStore } from '../stores/chatbot'
+import { getCsrfToken } from '../utils/csrf'
+
+const API_BASE = import.meta.env.VITE_API_BASE
 
 const router = useRouter()
 const userStore = useUserStore()
 const chatStore = useChatStore()
 
-const API_BASE = import.meta.env.VITE_API_BASE
-
 const isAuthenticated = computed(() => userStore.isAuthenticated)
+const displayName = computed(() => {
+  const u = userStore.user
+  if (!u) return ''
+  return u.nickname || u.username || u.email || ''
+})
 
-// 폼 상태
-const preference = ref('')
-const region = ref('')
-const dates = ref('')
-const transport = ref('')
-const errorMessage = ref('')
-const isSubmitting = ref(false)
-
-// 샘플 키워드 버튼 목록 (실제 keyword_selection.html 을 참고해서 수정 가능)
-const keywordOptions = [
-  '줄 서도 먹는 빵집',
-  '디저트가 맛있는 카페',
-  '아침에 가기 좋은 빵집',
-  '뷰가 좋은 베이커리',
+/**
+ * 1) 선호 키워드: 여러 개 선택, 최대 3개
+ */
+const preferenceOptions = [
+  { value: '줄 서도 먹는 빵집', label: '줄 서도 먹는 빵집', emoji: '⏳' },
+  { value: '동네 소문난 빵집', label: '동네 소문난 빵집', emoji: '🏘️' },
+  { value: '디저트 카페', label: '디저트 카페', emoji: '🍰' },
+  { value: '바게트·하드 계열', label: '바게트 · 하드 계열', emoji: '🥖' },
+  { value: '크루아상 맛집', label: '크루아상 맛집', emoji: '🥐' },
+  { value: '에그타르트 맛집', label: '에그타르트 맛집', emoji: '🥧' },
 ]
 
-const selectKeyword = (kw) => {
-  preference.value = kw
+// 기본으로 1개는 선택해 둠
+const selectedPreferences = ref(['줄 서도 먹는 빵집'])
+
+/**
+ * 2) 지역: 대전 내 구만 선택
+ */
+const regionOptions = ['동구', '중구', '서구', '유성구', '대덕구']
+const region = ref('서구') // 기본값은 서구로 설정 (원하시는 구로 변경 가능)
+
+/**
+ * 3) 날짜: from - to (달력)
+ */
+const startDate = ref('')
+const endDate = ref('')
+
+/**
+ * 4) 이동 수단
+ */
+const transportOptions = ['대중교통', '자차', '도보 위주', '상관없음']
+const transport = ref('대중교통')
+
+const isLoading = ref(false)
+const errorMessage = ref('')
+
+/**
+ * 선호 키워드 토글 (최대 3개까지)
+ */
+const togglePreference = (value) => {
+  errorMessage.value = ''
+
+  const idx = selectedPreferences.value.indexOf(value)
+  if (idx !== -1) {
+    // 이미 선택된 상태 → 해제
+    selectedPreferences.value.splice(idx, 1)
+    return
+  }
+
+  // 아직 선택되지 않았는데 3개를 초과하려고 하면 막기
+  if (selectedPreferences.value.length >= 3) {
+    errorMessage.value = '선호 키워드는 최대 3개까지 선택할 수 있습니다.'
+    return
+  }
+
+  selectedPreferences.value.push(value)
 }
 
+/**
+ * 챗봇 시작 (init 호출 후 /chatbot 으로 이동)
+ */
 const startChat = async () => {
   errorMessage.value = ''
 
   if (!isAuthenticated.value) {
-    errorMessage.value = '챗봇을 사용하려면 로그인이 필요합니다.'
+    errorMessage.value = '챗봇을 사용하려면 먼저 로그인 해주세요.'
     return
   }
 
-  if (!preference.value.trim()) {
-    errorMessage.value = '최소 한 가지 선호 키워드를 입력하거나 선택해 주세요.'
+  if (selectedPreferences.value.length === 0) {
+    errorMessage.value = '최소 한 개 이상의 선호 키워드를 선택해주세요.'
     return
   }
 
-  isSubmitting.value = true
+  if (!startDate.value || !endDate.value) {
+    errorMessage.value = '여행 시작일과 종료일을 모두 선택해주세요.'
+    return
+  }
+
+  const csrftoken = getCsrfToken()
+  if (!csrftoken) {
+    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
+    return
+  }
+
+  isLoading.value = true
 
   try {
+    // preference: 여러 키워드를 ", "로 합쳐서 하나의 문자열로 전송
+    const preferenceString = selectedPreferences.value.join(', ')
+    // dates: "YYYY-MM-DD ~ YYYY-MM-DD" 형태로 전송
+    const datesString = `${startDate.value} ~ ${endDate.value}`
+
     const res = await fetch(`${API_BASE}/chatbot/init/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
       },
       credentials: 'include',
       body: JSON.stringify({
-        preference: preference.value.trim(),
-        region: region.value.trim(),
-        dates: dates.value.trim(),
-        transport: transport.value.trim(),
+        preference: preferenceString,
+        region: region.value,
+        dates: datesString,
+        transport: transport.value,
       }),
     })
 
@@ -69,111 +133,143 @@ const startChat = async () => {
         const data = await res.json()
         if (data.detail) detail = data.detail
       } catch {
-        // ignore
+        // HTML 응답일 경우 json 파싱 실패 → 기본 메시지 유지
       }
       throw new Error(detail)
     }
 
     const data = await res.json()
 
-    // Pinia에 초기 대화 상태 저장
-    chatStore.setInitialConversation(data.conversation_id, data.initial_messages || [])
+    // Pinia store에 초기 대화 상태 세팅
+    chatStore.reset()
+    chatStore.setInitialConversation(data.conversation_id, data.initial_messages)
 
-    // 챗봇 화면으로 이동
+    // 키워드 선택 끝 → 실제 챗봇 화면으로 이동
     router.push({ name: 'chatbot' })
   } catch (err) {
     console.error(err)
     errorMessage.value = err.message || '챗봇 초기화 중 알 수 없는 오류가 발생했습니다.'
   } finally {
-    isSubmitting.value = false
+    isLoading.value = false
   }
 }
 </script>
 
 <template>
-  <div class="keyword-page">
-    <div class="keyword-card pixel-corners">
-      <h2 class="keyword-title">🥐 빵집 추천 챗봇 시작하기</h2>
-      <p class="keyword-subtitle">
-        먼저 여행/빵집 취향을 간단히 알려주시면, 그에 맞춰 챗봇이 대화를 시작합니다.
-      </p>
-
-      <div v-if="!isAuthenticated" class="keyword-alert">
-        로그인 후에 챗봇을 사용할 수 있습니다.
+  <div class="kw-page">
+    <div class="kw-card pixel-corners">
+      <div class="kw-header">
+        <div class="emoji">🥐</div>
+        <h2 class="title">TripSnap 빵집 여행 키워드 선택</h2>
+        <p class="subtitle" v-if="displayName">
+          {{ displayName }} 님의 취향을 알려주시면 맞춤 빵집을 추천해 드릴게요.
+        </p>
+        <p class="subtitle" v-else>취향을 선택하고 로그인하면, 맞춤 빵집을 추천해 드립니다.</p>
       </div>
 
-      <div class="keyword-section">
-        <label class="field-label">선호 키워드</label>
-        <input
-          v-model="preference"
-          type="text"
-          class="field-input"
-          placeholder="예: 줄 서도 먹는 빵집, 디저트 맛집, 아침에 가기 좋은 빵집 등"
-        />
-
-        <div class="keyword-options">
+      <!-- 1. 선호 키워드 (최대 3개) -->
+      <section class="kw-section">
+        <h3 class="section-title">1. 어떤 빵집을 찾으시나요? (최대 3개 선택)</h3>
+        <p class="section-sub">가장 끌리는 키워드를 최대 3개까지 선택해주세요.</p>
+        <div class="chip-group">
           <button
-            v-for="kw in keywordOptions"
-            :key="kw"
+            v-for="opt in preferenceOptions"
+            :key="opt.value"
             type="button"
-            class="keyword-chip"
-            @click="selectKeyword(kw)"
+            class="chip"
+            :class="{ 'chip--active': selectedPreferences.includes(opt.value) }"
+            @click="togglePreference(opt.value)"
           >
-            {{ kw }}
+            <span class="chip-emoji">{{ opt.emoji }}</span>
+            <span class="chip-label">{{ opt.label }}</span>
           </button>
         </div>
-      </div>
+      </section>
 
-      <div class="keyword-grid">
-        <div class="keyword-section">
-          <label class="field-label">지역 (선택)</label>
-          <input
-            v-model="region"
-            type="text"
-            class="field-input"
-            placeholder="예: 대전 중구, 서울 성동구 등"
-          />
+      <!-- 2. 지역: 대전 구 선택 -->
+      <section class="kw-section">
+        <h3 class="section-title">2. 대전의 어느 구로 가시나요?</h3>
+        <p class="section-sub">대전 안에서 이동하실 구를 골라주세요.</p>
+        <div class="chip-group chip-group--scroll">
+          <button
+            v-for="opt in regionOptions"
+            :key="opt"
+            type="button"
+            class="chip"
+            :class="{ 'chip--active': region === opt }"
+            @click="region = opt"
+          >
+            {{ opt }}
+          </button>
         </div>
+      </section>
 
-        <div class="keyword-section">
-          <label class="field-label">여행 날짜 (선택)</label>
-          <input v-model="dates" type="text" class="field-input" placeholder="예: 12/30 ~ 1/1" />
+      <!-- 3. 날짜: 달력 from - to -->
+      <section class="kw-section">
+        <h3 class="section-title">3. 언제 떠나시나요?</h3>
+        <p class="section-sub">여행 시작일과 종료일을 달력에서 선택해주세요.</p>
+        <div class="date-range">
+          <div class="date-field">
+            <label class="date-label">출발일</label>
+            <input v-model="startDate" type="date" class="date-input" />
+          </div>
+          <span class="date-separator">~</span>
+          <div class="date-field">
+            <label class="date-label">도착일</label>
+            <input v-model="endDate" type="date" class="date-input" />
+          </div>
         </div>
+      </section>
 
-        <div class="keyword-section">
-          <label class="field-label">이동 수단 (선택)</label>
-          <input
-            v-model="transport"
-            type="text"
-            class="field-input"
-            placeholder="예: 도보, 대중교통, 자가용 등"
-          />
+      <!-- 4. 이동수단 -->
+      <section class="kw-section">
+        <h3 class="section-title">4. 이동 수단을 알려주세요</h3>
+        <div class="chip-group">
+          <button
+            v-for="opt in transportOptions"
+            :key="opt"
+            type="button"
+            class="chip"
+            :class="{ 'chip--active': transport === opt }"
+            @click="transport = opt"
+          >
+            {{ opt }}
+          </button>
         </div>
-      </div>
+      </section>
 
-      <div class="keyword-actions">
-        <button
-          type="button"
-          class="btn-start pixel-corners"
-          :disabled="isSubmitting || !isAuthenticated"
-          @click="startChat"
-        >
-          {{ isSubmitting ? '준비 중...' : '챗봇 입장하기' }}
-        </button>
-      </div>
-
-      <p v-if="errorMessage" class="keyword-error">
+      <p v-if="errorMessage" class="error-msg">
         {{ errorMessage }}
       </p>
+
+      <div class="kw-actions">
+        <button
+          type="button"
+          class="start-btn pixel-corners"
+          :disabled="isLoading || !isAuthenticated"
+          @click="startChat"
+        >
+          <span v-if="isLoading">🤖 추천 준비 중...</span>
+          <span v-else-if="!isAuthenticated">로그인 후 채팅 시작</span>
+          <span v-else>선택 완료하고 채팅 시작하기</span>
+        </button>
+        <p class="helper-text">
+          나중에 채팅 중에도 "취향 다시 고를래"라고 말씀하시면, 새로운 키워드로 다시 추천을
+          도와드릴게요.
+        </p>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
+@use 'sass:color';
+
 $ts-border-brown: #d2691e;
 $ts-text-brown: #8b4513;
+$ts-bg-cream: #fffaf0;
 
-.keyword-page {
+.kw-page {
   min-height: calc(100vh - 160px);
   display: flex;
   justify-content: center;
@@ -181,7 +277,7 @@ $ts-text-brown: #8b4513;
   padding: 2.5rem 1rem;
 }
 
-.keyword-card {
+.kw-card {
   max-width: 52rem;
   width: 100%;
   margin: 0 auto;
@@ -189,111 +285,197 @@ $ts-text-brown: #8b4513;
   border-radius: 1.25rem;
   border: 4px solid $ts-border-brown;
   box-shadow: 0 22px 55px rgba(0, 0, 0, 0.15);
-  padding: 2rem 1.8rem;
+  padding: 1.75rem 1.8rem 1.5rem;
+  display: flex;
+  flex-direction: column;
 }
 
-.keyword-title {
-  font-size: 1.7rem;
-  font-weight: 700;
-  color: $ts-border-brown;
-  margin-bottom: 0.4rem;
-}
-
-.keyword-subtitle {
-  font-size: 0.95rem;
-  color: $ts-text-brown;
+.kw-header {
+  text-align: center;
   margin-bottom: 1.5rem;
 }
 
-.keyword-alert {
-  margin-bottom: 1rem;
-  padding: 0.8rem 1rem;
-  border-radius: 0.8rem;
-  background: #fff2f2;
-  border: 1px solid #f28b82;
-  color: #b00020;
-  font-size: 0.9rem;
+.emoji {
+  font-size: 3.5rem;
+  margin-bottom: 0.5rem;
 }
 
-.keyword-section {
-  margin-bottom: 1.25rem;
-}
-
-.field-label {
-  display: block;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: $ts-text-brown;
+.title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: $ts-border-brown;
   margin-bottom: 0.3rem;
 }
 
-.field-input {
-  width: 100%;
-  font-size: 0.9rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 0.7rem;
-  border: 1px solid rgba(210, 105, 30, 0.4);
+.subtitle {
+  font-size: 0.95rem;
+  color: $ts-text-brown;
+  margin: 0;
 }
 
-.field-input:focus {
-  outline: none;
-  border-color: $ts-border-brown;
+/* 섹션 공통 */
+.kw-section {
+  margin-top: 1.4rem;
 }
 
-.keyword-options {
-  margin-top: 0.5rem;
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: $ts-border-brown;
+  margin-bottom: 0.3rem;
+}
+
+.section-sub {
+  font-size: 0.85rem;
+  color: color.adjust($ts-text-brown, $lightness: 5%);
+  margin-bottom: 0.6rem;
+}
+
+/* 칩(버튼) 그룹 */
+.chip-group {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.keyword-chip {
-  padding: 0.3rem 0.7rem;
-  font-size: 0.8rem;
+.chip-group--scroll {
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+
+  .chip {
+    white-space: nowrap;
+  }
+}
+
+.chip {
   border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
   border: 1px solid rgba(210, 105, 30, 0.4);
-  background: #fffaf0;
+  background-color: #ffffff;
+  color: $ts-text-brown;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.05s ease,
+    box-shadow 0.15s ease;
+
+  &:hover {
+    background-color: #fff5ea;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.04);
+  }
 }
 
-.keyword-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+.chip--active {
+  background-color: #ffefdb;
+  border-color: $ts-border-brown;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.08);
 }
 
-.keyword-actions {
-  margin-top: 1rem;
-  text-align: center;
-}
-
-.btn-start {
-  padding: 0.7rem 2.4rem;
+.chip-emoji {
   font-size: 1rem;
+}
+
+.error-msg {
+  margin-top: 0.8rem;
+  font-size: 0.85rem;
+  color: #b00020;
+}
+
+/* 날짜 범위 */
+.date-range {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.date-label {
+  font-size: 0.8rem;
+  color: $ts-text-brown;
+}
+
+.date-input {
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(210, 105, 30, 0.4);
+  font-size: 0.85rem;
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: $ts-border-brown;
+}
+
+.date-separator {
+  font-size: 1rem;
+  color: $ts-text-brown;
+}
+
+/* 하단 액션 */
+.kw-actions {
+  margin-top: 1.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.start-btn {
+  padding: 0.75rem 1.8rem;
+  font-size: 0.95rem;
   font-weight: 700;
   border-radius: 0.9rem;
   border: 3px solid $ts-border-brown;
   background-color: #ff69b4;
   color: #ffffff;
   cursor: pointer;
+  box-shadow: 0 10px 0 color.adjust(#ff69b4, $lightness: -18%);
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease,
+    opacity 0.1s ease;
 }
 
-.btn-start:disabled {
+.start-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 0 color.adjust(#ff69b4, $lightness: -20%);
+}
+
+.start-btn:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
-  background-color: #ffd2e9;
-  border-color: #f8a9cf;
+  box-shadow: none;
 }
 
-.keyword-error {
-  margin-top: 0.8rem;
-  font-size: 0.85rem;
-  color: #b00020;
+.helper-text {
+  font-size: 0.8rem;
+  color: color.adjust($ts-text-brown, $lightness: 10%);
+  text-align: center;
 }
 
-@media (min-width: 768px) {
-  .keyword-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (max-width: 640px) {
+  .kw-card {
+    padding: 1.4rem 1.1rem 1.1rem;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+
+  .date-range {
+    align-items: stretch;
   }
 }
 </style>

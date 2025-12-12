@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router' // ✅ useRoute 추가
 import { useUserStore } from '../stores/users'
 
 const router = useRouter()
+const route = useRoute() // ✅ 현재 라우트 정보
 const userStore = useUserStore()
 
 // 최초 진입 시 세션 기반 로그인 상태 동기화
@@ -34,6 +35,45 @@ const handleLogout = async () => {
   }
   router.push({ name: 'home' })
 }
+
+/* ✅ 추가: 현재가 "키워드 선택 화면" 인지 판별
+   - 라우트 이름 기준: 'chat_keywords'
+   - 혹시 이름이 다르다면, path.startsWith 로 보완
+   → 실제 router/index.js 에서 설정한 name/path와 맞춰 주세요.
+*/
+const isKeywordPage = computed(() => {
+  if (route.name === 'chat_keywords') return true
+  if (typeof route.path === 'string' && route.path.startsWith('/chatbot/keywords')) {
+    return true
+  }
+  return false
+})
+
+/* ✅ 추가: 버튼 라벨
+   - 키워드 화면: "채팅으로"
+   - 그 외: "챗봇 대화"
+*/
+const chatButtonLabel = computed(() => (isKeywordPage.value ? '채팅으로' : '챗봇 대화'))
+
+/* ✅ 추가: 버튼 클릭 시 동작
+   - 비로그인: 로그인 화면으로
+   - 키워드 화면: 실제 챗봇 화면으로 (예: name: 'chatbot')
+   - 그 외 화면: 키워드 선택 화면으로 (예: name: 'chat_keywords')
+*/
+const handleChatButton = () => {
+  if (!isAuthenticated.value) {
+    router.push({ name: 'login' })
+    return
+  }
+
+  if (isKeywordPage.value) {
+    // 키워드 선택 화면 → 채팅 화면으로 이동
+    router.push({ name: 'chatbot' }) // router/index.js 에서 실제 name 확인
+  } else {
+    // 다른 화면 → 키워드 선택 화면으로 이동
+    router.push({ name: 'chat_keywords' })
+  }
+}
 </script>
 
 <template>
@@ -58,7 +98,13 @@ const handleLogout = async () => {
             님 🎉
           </p>
 
-          <button type="button" class="ts-btn ts-btn--primary" @click="goProfile">내 프로필</button>
+          <!-- ✅ 챗봇 진입/복귀 버튼 -->
+          <button type="button" class="ts-btn ts-btn--primary" @click="handleChatButton">
+            {{ chatButtonLabel }}
+          </button>
+
+          <!-- 프로필 / 로그아웃 버튼은 기존대로 유지 -->
+          <button type="button" class="ts-btn ts-btn--ghost" @click="goProfile">내 프로필</button>
 
           <button type="button" class="ts-btn ts-btn--ghost" @click="handleLogout">로그아웃</button>
         </template>
