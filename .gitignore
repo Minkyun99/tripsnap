@@ -279,6 +279,5 @@ pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/django,venv,python
 
-frontend
+sql.sql
 
-sql.sql*.pyc

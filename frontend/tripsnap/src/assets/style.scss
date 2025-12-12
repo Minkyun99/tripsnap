@@ -1,0 +1,54 @@
+/* src/assets/styles.scss */
+
+/* 공통 색상 변수 */
+$ts-header-bg: #ffe8cc;
+$ts-border-brown: #d2691e;
+$ts-text-brown: #8b4513;
+$ts-body-gradient-start: #ffe8cc;
+$ts-body-gradient-end: #ffdab9;
+
+/* 전체 배경 및 폰트 (Django base/index.html 참고) */
+body {
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  background: linear-gradient(135deg, $ts-body-gradient-start 0%, $ts-body-gradient-end 100%);
+  min-height: 100vh;
+}
+
+/* 픽셀 모서리 효과 (pixel-corners) */
+.pixel-corners {
+  clip-path: polygon(
+    0 8px,
+    8px 8px,
+    8px 0,
+    calc(100% - 8px) 0,
+    calc(100% - 8px) 8px,
+    100% 8px,
+    100% calc(100% - 8px),
+    calc(100% - 8px) calc(100% - 8px),
+    calc(100% - 8px) 100%,
+    8px 100%,
+    8px calc(100% - 8px),
+    0 calc(100% - 8px)
+  );
+}
+
+/* 빵 이모지 둥둥 떠다니는 애니메이션 */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.bread-float {
+  animation: float 3s ease-in-out infinite;
+}

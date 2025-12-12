@@ -25,8 +25,8 @@ from users import views as users_views
 urlpatterns = [
     path('admin/', admin.site.urls),
     
-    # 메인페이지
-    path('', TemplateView.as_view(template_name='home.html'), name='home'),
+    # # 메인페이지
+    # path('', TemplateView.as_view(template_name='home.html'), name='home'),
     
     # [1] dj-rest-auth 및 소셜 로그인 시작 URL
     path('api/auth/', include('dj_rest_auth.urls')),

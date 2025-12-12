@@ -1,151 +1,237 @@
 from django.shortcuts import render, redirect
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-from django.views.decorators.csrf import ensure_csrf_cookie
-from .rag_wrapper import RAGWrapper
-from .models import Conversation, Message
-import json
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
 
-# `chatbot/` 루트 뷰: 로그인된 사용자가 키워드 선택 페이지로 이동합니다.
+from django.views.decorators.csrf import ensure_csrf_cookie
+
+from .rag_wrapper import RAGWrapper
+from .models import Conversation, Message
+
+import json
+
+
+# 1) 기존과 동일: /chatbot/ → 키워드 선택 템플릿
 @login_required
 def chatbot(request):
+    """
+    브라우저에서 바로 /chatbot/ 으로 접근할 때 사용하는 템플릿 뷰.
+    (기존 keyword_selection.html 렌더링)
+    """
     return render(request, "chat/keyword_selection.html")
 
 
-# GET: 키워드 선택 페이지 또는 Conversation을 생성한 뒤 채팅 룸을 렌더링합니다.
-# POST: JSON 바디로 메시지를 받아 RAG 결과를 반환하고 메시지를 저장하는 API 엔드포인트입니다.
-@ensure_csrf_cookie
-@api_view(['GET', 'POST'])
-def chat(request):
-    # 수동 인증 검사: Django의 로그인 상태를 확인합니다.
-    # - GET 요청은 로그인 페이지로 리다이렉트합니다 (브라우저 사용 시).
-    # - POST(API) 요청은 JSON 응답으로 401을 반환합니다.
-    if not request.user or not request.user.is_authenticated:
-        if request.method == 'GET':
-            # 로그인 페이지로 이동시키되, 완료 후 현재 경로로 돌아오게 합니다.
-            return redirect(f"{settings.LOGIN_URL}?next={request.path}")
-        return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
-    if request.method == 'GET':
-        # 템플릿에서 전달된 단일 선호(preference) 파라미터를 읽습니다. (이전 키인 characteristic도 지원)
-        preference = request.GET.get('preference') or request.GET.get('characteristic') or ''
+# 2) Vue용 초기화 API: /chatbot/init/ (POST)
+#    → 기존 chat(GET)에서 하던 Conversation 생성 + META 저장 + 초기 봇 메시지 2개 생성 로직을
+#      JSON 기반으로 옮긴 버전입니다.
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def chat_init(request):
+    """
+    Vue의 KeywordSelectionView에서 호출하는 초기화 엔드포인트.
 
-        # 선호 키워드가 없으면 키워드 선택 페이지로 이동
-        if not preference:
-            return render(request, 'chat/keyword_selection.html')
+    POST /chatbot/init/
+    body(JSON):
+      {
+        "preference": "줄 서도 먹는 빵집",
+        "region": "대전",
+        "dates": "주말",
+        "transport": "대중교통"
+      }
 
-        # 선택적으로 전달된 다른 파라미터를 읽습니다.
-        region = request.GET.get('region', '')
-        dates = request.GET.get('dates', '')
-        transport = request.GET.get('transport', '')
+    응답(JSON):
+      {
+        "conversation_id": "1",
+        "preference": "...",
+        "region": "...",
+        "dates": "...",
+        "transport": "...",
+        "initial_messages": [
+          {"role": "bot", "content": "선택하신 키워드: ..."},
+          {"role": "bot", "content": "원하시는 것을 더 자세히..."}
+        ]
+      }
+    """
+    data = request.data
 
-        # Conversation 객체를 생성합니다 (최소 정보만 보관).
-        conv = Conversation.objects.create(user=request.user)
+    preference = (data.get('preference') or '').strip()
+    region = (data.get('region') or '').strip()
+    dates = (data.get('dates') or '').strip()
+    transport = (data.get('transport') or '').strip()
 
-        # 사용자가 선택한 메타 정보를 시스템 메시지로 저장합니다.
-        # JSON 문자열로 저장하여 이후에 파싱할 수 있게 합니다.
-        meta = {
-            'preference': preference,
-            'region': region,
-            'dates': dates,
-            'transport': transport,
-        }
-        Message.objects.create(conversation=conv, sender=Message.SENDER_SYSTEM, content='__META__:' + json.dumps(meta, ensure_ascii=False))
+    if not preference:
+        return Response(
+            {'detail': 'preference(선호 키워드)는 필수입니다.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-        # 사용자가 선택한 내용을 요약하는 봇의 안내 메시지 두 개를 생성합니다.
-        # 이 초기 메시지들은 OpenAI(LLM)를 호출하지 않고 서버에서 직접 생성됩니다.
-        summary = f"선택하신 키워드: {preference}"
-        prompt = "원하시는 것을 더 자세히 설명해주시겠어요? 그냥 추천해달라고 하시면 바로 추천을 시작할게요."
+    # Conversation 생성 (기존 GET chat 로직과 동일)
+    conv = Conversation.objects.create(user=request.user)
 
-        Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=summary)
-        Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=prompt)
+    meta = {
+        'preference': preference,
+        'region': region,
+        'dates': dates,
+        'transport': transport,
+    }
+    # META 시스템 메시지 저장
+    Message.objects.create(
+        conversation=conv,
+        sender=Message.SENDER_SYSTEM,
+        content='__META__:' + json.dumps(meta, ensure_ascii=False),
+    )
 
-        context = {
-            'preference': preference,
-            'region': region,
-            'dates': dates,
-            'transport': transport,
+    # 안내용 초기 봇 메시지 2개 생성 (기존과 동일)
+    summary = f"선택하신 키워드: {preference}"
+    prompt = "원하시는 것을 더 자세히 설명해주시겠어요? 그냥 추천해달라고 하시면 바로 추천을 시작할게요."
+
+    Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=summary)
+    Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=prompt)
+
+    return Response(
+        {
             'conversation_id': str(conv.id),
-            'initial_bot_1': summary,
-            'initial_bot_2': prompt,
-        }
-        return render(request, 'chat/room.html', context)
+            'preference': preference,
+            'region': region,
+            'dates': dates,
+            'transport': transport,
+            'initial_messages': [
+                {'role': 'bot', 'content': summary},
+                {'role': 'bot', 'content': prompt},
+            ],
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
-    # POST: API 스타일 요청 처리 (JSON 바디 예: {"message": "...", "conversation_id": "..."})
-    if request.method == 'POST':
-        data = request.data if hasattr(request, 'data') else request.POST
 
-        # 클라이언트로부터 온 메시지와 대화 ID, 선택적 trigger 플래그를 읽습니다.
-        message = data.get('message')
-        conversation_id = data.get('conversation_id')
-        # trigger가 True이면 RAG(LLM) 호출; 아니면 단순 저장만 수행합니다.
-        trigger = data.get('trigger')
+# 3) 실제 대화 API: /chatbot/chat/ (POST)
+#    → 아래 로직은 질문에 주신 기존 chat(view)를
+#      Vue + JSON 환경에 맞게 그대로 옮긴 것입니다.
+@ensure_csrf_cookie
+@api_view(['POST'])
+def chat(request):
+    """
+    Vue의 ChatbotView에서 호출하는 실제 대화 엔드포인트.
 
-        if not message:
-            return Response({'error': '메시지를 입력해주세요'}, status=status.HTTP_400_BAD_REQUEST)
+    POST /chatbot/chat/
+    body(JSON):
+      {
+        "message": "에그타르트 맛집 추천해줘",
+        "conversation_id": "1",
+        "trigger": true
+      }
 
-        # 대화(Conversation)를 찾습니다.
-        conv = None
-        if conversation_id:
+    응답(JSON):
+      {
+        "llm_response": "...",
+        "results": [ ... RAG 추천 결과 ... ]
+      }
+    """
+    # 수동 인증 검사: 기존 코드 그대로 유지
+    user = request.user
+    if not user or not user.is_authenticated:
+        return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    # request.data(JSON) 또는 request.POST 폼 데이터를 안전하게 처리
+    data = request.data if hasattr(request, 'data') else request.POST
+
+    # 클라이언트로부터 온 메시지와 대화 ID, 선택적 trigger 플래그를 읽습니다.
+    message = data.get('message')
+    conversation_id = data.get('conversation_id')
+    # trigger가 True이면 RAG(LLM) 호출; 아니면 단순 저장만 수행합니다.
+    trigger = data.get('trigger')
+
+    if not message:
+        return Response({'error': '메시지를 입력해주세요'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # 대화(Conversation)를 찾습니다.
+    conv = None
+    if conversation_id:
+        try:
+            # 사용자 소유의 대화인지 한 번 더 체크 (보안 강화)
+            conv = Conversation.objects.get(id=conversation_id, user=user)
+        except Conversation.DoesNotExist:
+            conv = None
+
+    if conv is None:
+        conv = Conversation.objects.create(user=user)
+
+    # 사용자 메시지를 저장합니다.
+    Message.objects.create(
+        conversation=conv,
+        sender=Message.SENDER_USER,
+        content=message,
+    )
+
+    # RAG 호출 여부 결정: 기존 코드 로직 그대로
+    should_call_rag = False
+    if trigger and str(trigger).lower() in ['1', 'true', 'yes']:
+        should_call_rag = True
+    if '추천' in message or '추천해' in message:
+        should_call_rag = True
+
+    if not should_call_rag:
+        # RAG를 호출하지 않고 저장만 한 경우, 저장 완료 응답을 반환합니다.
+        return Response({'saved': True})
+
+    # 대화에서 메타 시스템 메시지를 찾아 region/keywords 등을 복원합니다.
+    region_context = ''
+    keywords_context = ''
+    try:
+        meta_msg = (
+            Message.objects
+            .filter(conversation=conv, sender=Message.SENDER_SYSTEM)
+            .order_by('created_at')
+            .first()
+        )
+        if meta_msg and meta_msg.content.startswith('__META__:'):
+            meta_json = meta_msg.content.split('__META__:', 1)[1]
             try:
-                conv = Conversation.objects.get(id=conversation_id)
-            except Conversation.DoesNotExist:
-                conv = None
-
-        if conv is None:
-            conv = Conversation.objects.create(user=request.user)
-
-        # 사용자 메시지를 저장합니다.
-        Message.objects.create(conversation=conv, sender=Message.SENDER_USER, content=message)
-
-        # RAG 호출 여부 결정: 클라이언트의 trigger 플래그 또는 메시지에 '추천' 관련 단어가 포함된 경우
-        should_call_rag = False
-        if trigger and str(trigger).lower() in ['1', 'true', 'yes']:
-            should_call_rag = True
-        if '추천' in message or '추천해' in message:
-            should_call_rag = True
-
-        if not should_call_rag:
-            # RAG를 호출하지 않고 저장만 한 경우, 저장 완료 응답을 반환합니다.
-            return Response({'saved': True})
-
-        # 대화에서 메타 시스템 메시지를 찾아 region/keywords 등을 복원합니다.
+                meta = json.loads(meta_json)
+                region_context = meta.get('region', '') or ''
+                keywords_context = meta.get('preference', '') or ''
+            except Exception:
+                region_context = ''
+                keywords_context = ''
+    except Exception:
         region_context = ''
         keywords_context = ''
-        try:
-            meta_msg = Message.objects.filter(conversation=conv, sender=Message.SENDER_SYSTEM).order_by('created_at').first()
-            if meta_msg and meta_msg.content.startswith('__META__:'):
-                meta_json = meta_msg.content.split('__META__:', 1)[1]
-                try:
-                    meta = json.loads(meta_json)
-                    region_context = meta.get('region', '') or ''
-                    keywords_context = meta.get('preference', '') or ''
-                except Exception:
-                    region_context = ''
-                    keywords_context = ''
-        except Exception:
-            region_context = ''
-            keywords_context = ''
 
-        # 프롬프트에 지역 및 선호 키워드를 포함
-        prompt_for_rag = message
-        parts = []
-        if region_context:
-            parts.append(f"지역: {region_context}")
-        if keywords_context:
-            parts.append(f"선호: {keywords_context}")
-        if parts:
-            prompt_for_rag = "\n".join(parts) + "\n" + message
+    # 프롬프트에 지역 및 선호 키워드를 포함
+    prompt_for_rag = message
+    parts = []
+    if region_context:
+        parts.append(f"지역: {region_context}")
+    if keywords_context:
+        parts.append(f"선호: {keywords_context}")
+    if parts:
+        prompt_for_rag = "\n".join(parts) + "\n" + message
 
+    # ✅ 기존 코드와 동일하게 RAGWrapper.chat 호출
+    try:
         result = RAGWrapper.chat(message=prompt_for_rag, use_llm=True)
-        llm_response = result.get('llm_response')
-        if llm_response:
-            Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=llm_response)
+    except Exception as e:
+        return Response(
+            {'detail': f'추천 엔진 호출 중 오류가 발생했습니다: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
-        return Response({'llm_response': llm_response, 'results': result.get('results', [])})
+    llm_response = result.get('llm_response')
+    if llm_response:
+        Message.objects.create(
+            conversation=conv,
+            sender=Message.SENDER_BOT,
+            content=llm_response,
+        )
 
-    # 허용되지 않는 HTTP 메서드에 대해서는 405 응답을 반환합니다.
-    return Response({'error': 'Method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    return Response(
+        {
+            'llm_response': llm_response,
+            'results': result.get('results', []),
+        },
+        status=status.HTTP_200_OK,
+    )

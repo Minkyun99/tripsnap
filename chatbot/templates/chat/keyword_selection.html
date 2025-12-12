@@ -1,308 +1,528 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>🍞TripSnap - 키워드 선택</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            /* 기존 스타일 유지 */
-            background: linear-gradient(135deg, #FFE8CC 0%, #FFDAB9 100%);
-            min-height: 100vh;
-        }
+      body {
+        font-family: "Inter", sans-serif;
+        /* 기존 스타일 유지 */
+        background: linear-gradient(135deg, #ffe8cc 0%, #ffdab9 100%);
+        min-height: 100vh;
+      }
 
-        .pixel-corners {
-            /* 픽셀 모서리 스타일 유지 */
-            clip-path: polygon(
-                0 8px, 8px 8px, 8px 0,
-                calc(100% - 8px) 0, calc(100% - 8px) 8px, 100% 8px,
-                100% calc(100% - 8px), calc(100% - 8px) calc(100% - 8px),
-                calc(100% - 8px) 100%, 8px 100%, 8px calc(100% - 8px),
-                0 calc(100% - 8px)
-            );
-        }
+      .pixel-corners {
+        /* 픽셀 모서리 스타일 유지 */
+        clip-path: polygon(
+          0 8px,
+          8px 8px,
+          8px 0,
+          calc(100% - 8px) 0,
+          calc(100% - 8px) 8px,
+          100% 8px,
+          100% calc(100% - 8px),
+          calc(100% - 8px) calc(100% - 8px),
+          calc(100% - 8px) 100%,
+          8px 100%,
+          8px calc(100% - 8px),
+          0 calc(100% - 8px)
+        );
+      }
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(5deg); }
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0px) rotate(0deg);
         }
-        
-        .bread-float {
-            animation: float 3s ease-in-out infinite;
+        50% {
+          transform: translateY(-20px) rotate(5deg);
         }
+      }
 
-        .keyword-button {
-            /* 키워드 버튼 스타일 */
-            background: #FFF5E6;
-            color: #8B4513;
-            border: 2px solid #D2691E;
-            transition: all 0.2s;
-        }
+      .bread-float {
+        animation: float 3s ease-in-out infinite;
+      }
 
-        .keyword-button:hover {
-            background: #FFDAB9;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
+      .keyword-button {
+        /* 키워드 버튼 스타일 */
+        background: #fff5e6;
+        color: #8b4513;
+        border: 2px solid #d2691e;
+        transition: all 0.2s;
+      }
 
-        .keyword-button.selected {
-            background: #FF69B4; /* 핫핑크 */
-            color: white;
-            border-color: #FF1493; /* 진한 핑크 */
-            transform: scale(1.05);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
+      .keyword-button:hover {
+        background: #ffdab9;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
 
-        .keyword-button.disabled {
-            background: #E0E0E0;
-            color: #999;
-            border-color: #CCC;
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
+      .keyword-button.selected {
+        background: #ff69b4; /* 핫핑크 */
+        color: white;
+        border-color: #ff1493; /* 진한 핑크 */
+        transform: scale(1.05);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      }
 
-        .keyword-button.disabled:hover {
-            transform: none;
-            box-shadow: none;
-        }
+      .keyword-button.disabled {
+        background: #e0e0e0;
+        color: #999;
+        border-color: #ccc;
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
 
-        .section-box {
-            background: #FFE8CC;
-            border: 3px solid #D2691E;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-        }
+      .keyword-button.disabled:hover {
+        transform: none;
+        box-shadow: none;
+      }
+
+      .section-box {
+        background: #ffe8cc;
+        border: 3px solid #d2691e;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+      }
     </style>
-</head>
-<body class="min-h-screen flex flex-col">
-
+  </head>
+  <body class="min-h-screen flex flex-col">
     <header class="bg-[#FFE8CC] border-b-4 border-[#D2691E] p-6 pixel-corners">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-4">
-                <div class="bread-float text-5xl">🍞</div>
-                <div>
-                    <h1 class="text-4xl font-bold text-[#D2691E]">tripsnap</h1>
-                    <p class="text-[#8B4513] font-semibold">🍞 AI 빵집 추천 서비스</p>
-                </div>
-            </div>
-            <a href="/chatbot/" class="bg-white text-[#D2691E] px-6 py-3 rounded-lg pixel-corners border-2 border-[#D2691E] hover:bg-[#FFE8CC] transition-all duration-300 font-bold">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-2" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                </svg>
-                채팅으로
-            </a>
+      <div class="max-w-6xl mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <div class="bread-float text-5xl">🍞</div>
+          <div>
+            <h1 class="text-4xl font-bold text-[#D2691E]">tripsnap</h1>
+            <p class="text-[#8B4513] font-semibold">🍞 AI 빵집 추천 서비스</p>
+          </div>
         </div>
+        <a
+          href="/chatbot/"
+          class="bg-white text-[#D2691E] px-6 py-3 rounded-lg pixel-corners border-2 border-[#D2691E] hover:bg-[#FFE8CC] transition-all duration-300 font-bold"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-5 w-5 inline mr-2"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          채팅으로
+        </a>
+      </div>
     </header>
 
     <main class="flex-1 p-6 flex flex-col items-center justify-center">
-        <div class="max-w-5xl w-full">
-            <div class="bg-white/90 rounded-2xl pixel-corners border-4 border-[#D2691E] shadow-2xl p-8">
-                
-                <div class="text-center mb-8">
-                    <div class="text-6xl mb-4">✨</div>
-                    <h2 class="text-3xl font-bold text-[#D2691E] mb-2">🍞 선호 키워드 선택</h2>
-                    <p class="text-[#8B4513] font-medium">AI에게 빵집을 추천받기 전에, 당신의 취향을 알려주세요!</p>
-                </div>
+      <div class="max-w-5xl w-full">
+        <div
+          class="bg-white/90 rounded-2xl pixel-corners border-4 border-[#D2691E] shadow-2xl p-8"
+        >
+          <div class="text-center mb-8">
+            <div class="text-6xl mb-4">✨</div>
+            <h2 class="text-3xl font-bold text-[#D2691E] mb-2">
+              🍞 선호 키워드 선택
+            </h2>
+            <p class="text-[#8B4513] font-medium">
+              AI에게 빵집을 추천받기 전에, 당신의 취향을 알려주세요!
+            </p>
+          </div>
 
-                <form id="keyword-form" class="space-y-6">
-
-                    <!-- 지역 선택 -->
-                    <div class="section-box pixel-corners">
-                        <h3 class="text-xl font-bold text-[#8B4513] mb-4 border-b pb-2 border-[#D2691E]/50">📍 지역 선택</h3>
-                        <div class="grid grid-cols-3 gap-3">
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="region" data-value="동구">동구</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="region" data-value="중구">중구</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="region" data-value="서구">서구</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="region" data-value="유성구">유성구</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="region" data-value="대덕구">대덕구</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="region" data-value="대전 전체">대전 전체</button>
-                        </div>
-                        <p id="region-error" class="text-sm text-[#FF1493] mt-2 hidden">지역을 선택해주세요.</p>
-                    </div>
-
-                    <!-- 일정 선택 -->
-                    <div class="section-box pixel-corners">
-                        <h3 class="text-xl font-bold text-[#8B4513] mb-4 border-b pb-2 border-[#D2691E]/50">📅 여행 일정 (선택)</h3>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="text-sm font-semibold text-[#8B4513] block mb-2">시작 날짜</label>
-                                <input id="start-date" type="date" class="w-full px-4 py-3 rounded-lg border-2 border-[#D2691E]" />
-                            </div>
-                            <div>
-                                <label class="text-sm font-semibold text-[#8B4513] block mb-2">종료 날짜</label>
-                                <input id="end-date" type="date" class="w-full px-4 py-3 rounded-lg border-2 border-[#D2691E]" />
-                            </div>
-                        </div>
-                        <p class="text-sm text-[#8B4513] mt-2">일정을 입력하면 더욱 정확한 추천을 받을 수 있어요 (선택).</p>
-                    </div>
-
-                    <!-- 교통수단 선택 -->
-                    <div class="section-box pixel-corners">
-                        <h3 class="text-xl font-bold text-[#8B4513] mb-4 border-b pb-2 border-[#D2691E]/50">🚗 교통수단 (선택)</h3>
-                        <div class="grid grid-cols-4 gap-3">
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="transport" data-value="도보">🚶 도보</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="transport" data-value="버스">🚌 버스</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="transport" data-value="자가용">🚗 자가용</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="transport" data-value="지하철">🚇 지하철</button>
-                        </div>
-                        <p class="text-sm text-[#8B4513] mt-2">하나만 선택할 수 있습니다.</p>
-                    </div>
-
-                    <!-- 선호(키워드/특징) 선택(최대 3개) - bread + theme 통합 -->
-                    <div class="section-box pixel-corners">
-                        <h3 class="text-xl font-bold text-[#8B4513] mb-4 border-b pb-2 border-[#D2691E]/50">🥈 선호 키워드 (최대 3개)</h3>
-                        <div class="grid grid-cols-3 gap-3">
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="preference" data-value="소금빵">🥐 소금빵</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="preference" data-value="바삭한">✨ 바삭한</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="preference" data-value="마들렌">🍰 마들렌</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="preference" data-value="건강빵">🌾 건강빵</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="preference" data-value="겉바속촉">🔥 겉바속촉</button>
-                            <button type="button" class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold" data-category="preference" data-value="식빵">🍞 식빵</button>
-                        </div>
-                        <p id="preference-error" class="text-sm text-[#FF1493] mt-2 hidden">최대 3개까지만 선택할 수 있습니다.</p>
-                    </div>
-                    
-                    <button 
-                        type="submit"
-                        id="submit-button"
-                        class="w-full px-6 py-4 bg-[#FF69B4] hover:bg-[#FF1493] text-white rounded-lg pixel-corners border-4 border-[#D2691E] transition-colors font-extrabold text-xl shadow-lg hover:shadow-xl"
-                    >
-                        AI에게 추천받기! ✨
-                    </button>
-                </form>
-
+          <form id="keyword-form" class="space-y-6">
+            <!-- 지역 선택 -->
+            <div class="section-box pixel-corners">
+              <h3
+                class="text-xl font-bold text-[#8B4513] mb-4 border-b pb-2 border-[#D2691E]/50"
+              >
+                📍 지역 선택
+              </h3>
+              <div class="grid grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="region"
+                  data-value="동구"
+                >
+                  동구
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="region"
+                  data-value="중구"
+                >
+                  중구
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="region"
+                  data-value="서구"
+                >
+                  서구
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="region"
+                  data-value="유성구"
+                >
+                  유성구
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="region"
+                  data-value="대덕구"
+                >
+                  대덕구
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="region"
+                  data-value="대전 전체"
+                >
+                  대전 전체
+                </button>
+              </div>
+              <p id="region-error" class="text-sm text-[#FF1493] mt-2 hidden">
+                지역을 선택해주세요.
+              </p>
             </div>
+
+            <!-- 일정 선택 -->
+            <div class="section-box pixel-corners">
+              <h3
+                class="text-xl font-bold text-[#8B4513] mb-4 border-b pb-2 border-[#D2691E]/50"
+              >
+                📅 여행 일정 (선택)
+              </h3>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-sm font-semibold text-[#8B4513] block mb-2"
+                    >시작 날짜</label
+                  >
+                  <input
+                    id="start-date"
+                    type="date"
+                    class="w-full px-4 py-3 rounded-lg border-2 border-[#D2691E]"
+                  />
+                </div>
+                <div>
+                  <label class="text-sm font-semibold text-[#8B4513] block mb-2"
+                    >종료 날짜</label
+                  >
+                  <input
+                    id="end-date"
+                    type="date"
+                    class="w-full px-4 py-3 rounded-lg border-2 border-[#D2691E]"
+                  />
+                </div>
+              </div>
+              <p class="text-sm text-[#8B4513] mt-2">
+                일정을 입력하면 더욱 정확한 추천을 받을 수 있어요 (선택).
+              </p>
+            </div>
+
+            <!-- 교통수단 선택 -->
+            <div class="section-box pixel-corners">
+              <h3
+                class="text-xl font-bold text-[#8B4513] mb-4 border-b pb-2 border-[#D2691E]/50"
+              >
+                🚗 교통수단 (선택)
+              </h3>
+              <div class="grid grid-cols-4 gap-3">
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="transport"
+                  data-value="도보"
+                >
+                  🚶 도보
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="transport"
+                  data-value="버스"
+                >
+                  🚌 버스
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="transport"
+                  data-value="자가용"
+                >
+                  🚗 자가용
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="transport"
+                  data-value="지하철"
+                >
+                  🚇 지하철
+                </button>
+              </div>
+              <p class="text-sm text-[#8B4513] mt-2">
+                하나만 선택할 수 있습니다.
+              </p>
+            </div>
+
+            <!-- 선호(키워드/특징) 선택(최대 3개) - bread + theme 통합 -->
+            <div class="section-box pixel-corners">
+              <h3
+                class="text-xl font-bold text-[#8B4513] mb-4 border-b pb-2 border-[#D2691E]/50"
+              >
+                🥈 선호 키워드 (최대 3개)
+              </h3>
+              <div class="grid grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="preference"
+                  data-value="소금빵"
+                >
+                  🥐 소금빵
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="preference"
+                  data-value="바삭한"
+                >
+                  ✨ 바삭한
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="preference"
+                  data-value="마들렌"
+                >
+                  🍰 마들렌
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="preference"
+                  data-value="건강빵"
+                >
+                  🌾 건강빵
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="preference"
+                  data-value="겉바속촉"
+                >
+                  🔥 겉바속촉
+                </button>
+                <button
+                  type="button"
+                  class="keyword-button px-4 py-3 rounded-lg pixel-corners font-semibold"
+                  data-category="preference"
+                  data-value="식빵"
+                >
+                  🍞 식빵
+                </button>
+              </div>
+              <p
+                id="preference-error"
+                class="text-sm text-[#FF1493] mt-2 hidden"
+              >
+                최대 3개까지만 선택할 수 있습니다.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              id="submit-button"
+              class="w-full px-6 py-4 bg-[#FF69B4] hover:bg-[#FF1493] text-white rounded-lg pixel-corners border-4 border-[#D2691E] transition-colors font-extrabold text-xl shadow-lg hover:shadow-xl"
+            >
+              AI에게 추천받기! ✨
+            </button>
+          </form>
         </div>
+      </div>
     </main>
 
-    <footer class="bg-[#FFE8CC] border-t-4 border-[#D2691E] p-4 text-center pixel-corners mt-8">
-        <p class="text-[#8B4513] font-semibold">
-            ✨ 맛있는 빵집을 찾아 행복한 여행을 만들어요 ✨
-        </p>
-        <p class="text-xs text-[#D2691E] mt-1 font-medium">
-            Made with 💖 by tripsnap
-        </p>
+    <footer
+      class="bg-[#FFE8CC] border-t-4 border-[#D2691E] p-4 text-center pixel-corners mt-8"
+    >
+      <p class="text-[#8B4513] font-semibold">
+        ✨ 맛있는 빵집을 찾아 행복한 여행을 만들어요 ✨
+      </p>
+      <p class="text-xs text-[#D2691E] mt-1 font-medium">
+        Made with 💖 by tripsnap
+      </p>
     </footer>
 
     <!-- 뒷 배경에 빵 떠다니는거 -->
     <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div class="absolute text-5xl opacity-10" style="left: 10%; top: 20%; animation: float 5s ease-in-out infinite;">🥐</div>
-        <div class="absolute text-5xl opacity-10" style="left: 80%; top: 30%; animation: float 6s ease-in-out infinite 1s;">🥖</div>
-        <div class="absolute text-5xl opacity-10" style="left: 15%; top: 70%; animation: float 7s ease-in-out infinite 2s;">🍩</div>
-        <div class="absolute text-5xl opacity-10" style="left: 85%; top: 75%; animation: float 5.5s ease-in-out infinite 3s;">🥯</div>
+      <div
+        class="absolute text-5xl opacity-10"
+        style="left: 10%; top: 20%; animation: float 5s ease-in-out infinite"
+      >
+        🥐
+      </div>
+      <div
+        class="absolute text-5xl opacity-10"
+        style="left: 80%; top: 30%; animation: float 6s ease-in-out infinite 1s"
+      >
+        🥖
+      </div>
+      <div
+        class="absolute text-5xl opacity-10"
+        style="left: 15%; top: 70%; animation: float 7s ease-in-out infinite 2s"
+      >
+        🍩
+      </div>
+      <div
+        class="absolute text-5xl opacity-10"
+        style="
+          left: 85%;
+          top: 75%;
+          animation: float 5.5s ease-in-out infinite 3s;
+        "
+      >
+        🥯
+      </div>
     </div>
 
     <script>
-        const keywordButtons = document.querySelectorAll('.keyword-button');
-        const keywordForm = document.getElementById('keyword-form');
-        const regionError = document.getElementById('region-error');
-        const preferenceError = document.getElementById('preference-error');
-        
-        const selections = { 
-            region: null,
-            preference: [],
-            transport: null
-        };
+      const keywordButtons = document.querySelectorAll(".keyword-button");
+      const keywordForm = document.getElementById("keyword-form");
+      const regionError = document.getElementById("region-error");
+      const preferenceError = document.getElementById("preference-error");
 
-        const MAX_CHARACTERISTICS = 3;
+      const selections = {
+        region: null,
+        preference: [],
+        transport: null,
+      };
 
-        // 1. 키워드 선택 로직
-        keywordButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                e.preventDefault();
-                
-                const category = button.getAttribute('data-category');
-                const value = button.getAttribute('data-value');
+      const MAX_CHARACTERISTICS = 3;
 
-                // 지역: 하나만 선택
-                if (category === 'region') {
-                    document.querySelectorAll('[data-category="region"]').forEach(btn => {
-                        btn.classList.remove('selected');
-                    });
-                    button.classList.add('selected');
-                    selections.region = value;
-                    regionError.classList.add('hidden');
-                    console.log('선택된 지역:', selections.region);
-                    return;
-                }
+      // 1. 키워드 선택 로직
+      keywordButtons.forEach((button) => {
+        button.addEventListener("click", (e) => {
+          e.preventDefault();
 
-                // 교통수단: 하나만 선택
-                if (category === 'transport') {
-                    document.querySelectorAll('[data-category="transport"]').forEach(btn => {
-                        btn.classList.remove('selected');
-                    });
-                    button.classList.add('selected');
-                    selections.transport = value;
-                    console.log('선택된 교통수단:', selections.transport);
-                    return;
-                }
+          const category = button.getAttribute("data-category");
+          const value = button.getAttribute("data-value");
 
-                // 선호 키워드: 최대 3개 선택 (bread + theme 통합)
-                if (category === 'preference') {
-                    if (button.classList.contains('selected')) {
-                        button.classList.remove('selected');
-                        selections.preference = selections.preference.filter(v => v !== value);
-                        preferenceError.classList.add('hidden');
-                    } else {
-                        if (selections.preference.length < MAX_CHARACTERISTICS) {
-                            button.classList.add('selected');
-                            selections.preference.push(value);
-                            preferenceError.classList.add('hidden');
-                        } else {
-                            preferenceError.classList.remove('hidden');
-                            return;
-                        }
-                    }
-                    console.log('선택된 선호:', selections.preference);
-                    return;
-                }
-            });
-        });
+          // 지역: 하나만 선택
+          if (category === "region") {
+            document
+              .querySelectorAll('[data-category="region"]')
+              .forEach((btn) => {
+                btn.classList.remove("selected");
+              });
+            button.classList.add("selected");
+            selections.region = value;
+            regionError.classList.add("hidden");
+            console.log("선택된 지역:", selections.region);
+            return;
+          }
 
-        // 2. 폼 제출 로직
-        keywordForm.addEventListener('submit', (e) => {
-            e.preventDefault();
+          // 교통수단: 하나만 선택
+          if (category === "transport") {
+            document
+              .querySelectorAll('[data-category="transport"]')
+              .forEach((btn) => {
+                btn.classList.remove("selected");
+              });
+            button.classList.add("selected");
+            selections.transport = value;
+            console.log("선택된 교통수단:", selections.transport);
+            return;
+          }
 
-            // 필수 선택 검사
-            let hasError = false;
-
-            if (!selections.region) {
-                regionError.classList.remove('hidden');
-                hasError = true;
+          // 선호 키워드: 최대 3개 선택 (bread + theme 통합)
+          if (category === "preference") {
+            if (button.classList.contains("selected")) {
+              button.classList.remove("selected");
+              selections.preference = selections.preference.filter(
+                (v) => v !== value
+              );
+              preferenceError.classList.add("hidden");
             } else {
-                regionError.classList.add('hidden');
-            }
-
-            if (hasError) {
-                alert('필수 항목을 모두 선택해주세요! 🥖');
+              if (selections.preference.length < MAX_CHARACTERISTICS) {
+                button.classList.add("selected");
+                selections.preference.push(value);
+                preferenceError.classList.add("hidden");
+              } else {
+                preferenceError.classList.remove("hidden");
                 return;
+              }
             }
-
-            // 선택된 키워드를 하나의 문자열로 결합 (preference 필드)
-            const preferenceKeywords = selections.preference.join(',');
-
-            // 추가 입력값 읽기
-            const region = selections.region || '';
-            const startDate = document.getElementById('start-date').value;
-            const endDate = document.getElementById('end-date').value;
-            const dates = startDate && endDate ? `${startDate}~${endDate}` : (startDate || endDate || '');
-            const transport = selections.transport || '';
-            alert(`선택된 선호: ${preferenceKeywords || '없음'}\n지역: ${region}\n\n계속 진행하려면 "추천해줘"라고 입력해주세요.`);
-
-            // 쿼리 파라미터로 선택된 키워드(preference) 전달
-            const queryParams = new URLSearchParams();
-            if (preferenceKeywords) queryParams.append('preference', preferenceKeywords);
-            if (region) queryParams.append('region', region);
-            if (dates) queryParams.append('dates', dates);
-            if (transport) queryParams.append('transport', transport);
-
-            // 채팅 페이지로 리디렉션
-            window.location.href = `/chatbot/chat/?${queryParams.toString()}`;
+            console.log("선택된 선호:", selections.preference);
+            return;
+          }
         });
+      });
+
+      // 2. 폼 제출 로직
+      keywordForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        // 필수 선택 검사
+        let hasError = false;
+
+        if (!selections.region) {
+          regionError.classList.remove("hidden");
+          hasError = true;
+        } else {
+          regionError.classList.add("hidden");
+        }
+
+        if (hasError) {
+          alert("필수 항목을 모두 선택해주세요! 🥖");
+          return;
+        }
+
+        // 선택된 키워드를 하나의 문자열로 결합 (preference 필드)
+        const preferenceKeywords = selections.preference.join(",");
+
+        // 추가 입력값 읽기
+        const region = selections.region || "";
+        const startDate = document.getElementById("start-date").value;
+        const endDate = document.getElementById("end-date").value;
+        const dates =
+          startDate && endDate
+            ? `${startDate}~${endDate}`
+            : startDate || endDate || "";
+        const transport = selections.transport || "";
+        alert(
+          `선택된 선호: ${
+            preferenceKeywords || "없음"
+          }\n지역: ${region}\n\n계속 진행하려면 "추천해줘"라고 입력해주세요.`
+        );
+
+        // 쿼리 파라미터로 선택된 키워드(preference) 전달
+        const queryParams = new URLSearchParams();
+        if (preferenceKeywords)
+          queryParams.append("preference", preferenceKeywords);
+        if (region) queryParams.append("region", region);
+        if (dates) queryParams.append("dates", dates);
+        if (transport) queryParams.append("transport", transport);
+
+        // 채팅 페이지로 리디렉션
+        window.location.href = `/chatbot/chat/?${queryParams.toString()}`;
+      });
     </script>
-</body>
+  </body>
 </html>
