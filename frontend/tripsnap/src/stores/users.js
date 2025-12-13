@@ -135,5 +135,39 @@ export const useUserStore = defineStore('user', {
       const next = encodeURIComponent('/auth/kakao/complete')
       window.location.href = `${API_BASE}/accounts/kakao/login/?next=${next}`
     },
+
+    async logout() {
+      this.loading = true
+      this.error = null
+
+      try {
+        const csrftoken = getCsrfToken()
+
+        // dj-rest-auth 기본 로그아웃 엔드포인트
+        const res = await fetch(`${API_BASE}/api/auth/logout/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken,
+          },
+          credentials: 'include',
+          body: JSON.stringify({}), // 일부 백엔드는 빈 body를 요구하기도 함
+        })
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          console.warn('logout not ok:', data)
+          // 실패하더라도 프론트 상태는 일단 정리
+        }
+      } catch (err) {
+        console.error('logout error:', err)
+        // 네트워크 오류여도 일단 프론트 상태는 초기화
+      } finally {
+        // ✅ 프론트 상태 정리
+        this.user = null
+        this.isAuthenticated = false
+        this.loading = false
+      }
+    },
   },
 })

@@ -19,6 +19,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import TemplateView
+from django.shortcuts import redirect
 
 from users import views as users_views
 
@@ -26,7 +27,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # # 메인페이지
-    # path('', TemplateView.as_view(template_name='home.html'), name='home'),
+    path('', TemplateView.as_view(template_name='home.html'), name='home'),
     
     # [1] dj-rest-auth 및 소셜 로그인 시작 URL
     path('api/auth/', include('dj_rest_auth.urls')),
@@ -38,6 +39,7 @@ urlpatterns = [
     # dj-rest-auth가 소셜 로그인을 처리하기 위해 필요한 URL (예: /api/auth/kakao/login/)을 포함합니다.
     # dj-rest-auth 패키지의 urls.py에 정의된 소셜 로그인 관련 뷰를 사용하기 위해 필요합니다.
     path('api/auth/', include('allauth.socialaccount.urls')),
+    # path('auth/kakao/complete', lambda request: redirect('/'), name='kakao_complete'),
     # ==========================
     
     # [2] allauth의 핵심 URL (카카오 콜백 URI 처리를 위해 필수)
@@ -51,6 +53,11 @@ urlpatterns = [
 
     # [4] chatbot 앱 URL
     path('chatbot/', include('chatbot.urls')),
+
+
+    # ✅ 2) 카카오 로그인 완료 착지 URL (settings.LOGIN_REDIRECT_URL과 일치)
+    path('auth/kakao/complete', lambda request: redirect('http://localhost:5173/'), name='kakao_complete'),
+
 
 ]
 
