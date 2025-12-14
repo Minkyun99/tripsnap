@@ -30,6 +30,16 @@ from django.db.models import Q
 
 User = get_user_model()
 
+def abs_url(request, url_or_none):
+    """
+    Django FileField.url(/media/...) -> http://localhost:8000/media/... 로 변환
+    """
+    if not url_or_none:
+        return None
+    return request.build_absolute_uri(url_or_none)
+
+
+
 def home(request):
     """
     메인 페이지
@@ -126,12 +136,9 @@ def account_delete(request):
 # =========================================================
 #  프로필 페이지 + 피드 (내 프로필 / 다른 사람 프로필)
 # =========================================================
+
 @login_required
 def user_profile(request, nickname=None):
-    """
-    - /user/profile/           → 내 프로필 (nickname 없음)
-    - /user/profile/<nickname>/ → 특정 유저 프로필
-    """
     if nickname is None:
         target_user = request.user
     else:
@@ -139,11 +146,9 @@ def user_profile(request, nickname=None):
 
     is_owner = (target_user == request.user)
 
-    # 팔로워 / 팔로잉 숫자 (항상 동일하게 계산)
-    follower_count = target_user.follower_set.count()   # Follow.following의 related_name이 'follower_id'인 경우
-    following_count = target_user.following_set.count()  # Follow.follower의 related_name이 'following_id'인 경우
+    follower_count = target_user.follower_set.count()
+    following_count = target_user.following_set.count()
 
-    # 내가 이 사람을 팔로우 중인지 여부 (자기 자신일 땐 항상 False)
     is_following = False
     if request.user.is_authenticated and not is_owner:
         is_following = Social.objects.filter(
@@ -161,10 +166,41 @@ def user_profile(request, nickname=None):
 
     liked_post_ids = []
     if request.user.is_authenticated:
-        liked_post_ids = list(
-            request.user.likes.values_list("post_id", flat=True)
-        )
+        liked_post_ids = list(request.user.likes.values_list("post_id", flat=True))
 
+    # ✅ Vue(AJAX)면 JSON 반환
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        posts_data = []
+        for p in posts:
+            posts_data.append({
+                "id": p.id,
+                "title": p.title,
+                "content": p.content,
+                "share_trip": p.share_trip.url if p.share_trip else None,
+                "like_count": p.likes.count(),
+                "comment_count": p.comments.count(),
+                "writer_nickname": p.writer.nickname,
+                "is_owner": (p.writer_id == request.user.id),
+            })
+
+        return JsonResponse({
+            "target_user": {
+                "email": target_user.email,
+                "username": target_user.username,
+                "nickname": target_user.nickname,
+            },
+            "profile": {
+            "profile_img": abs_url(request, profile.profile_img.url) if profile.profile_img else None,
+        },
+            "posts": posts_data,
+            "is_owner": is_owner,
+            "is_following": is_following,
+            "follower_count": follower_count,
+            "following_count": following_count,
+            "liked_post_ids": liked_post_ids,
+        })
+
+    # (기존 템플릿 렌더링 유지)
     context = {
         "target_user": target_user,
         "profile": profile,
@@ -175,16 +211,13 @@ def user_profile(request, nickname=None):
         "following_count": following_count,
         "liked_post_ids": liked_post_ids,
     }
-
     return render(request, "user/profile.html", context)
 
-# =========================================================
-# fllowers / followings 목록 (AJAX 전용)
 @login_required
 def followers_list_ajax(request, nickname):
     target = get_object_or_404(User, nickname=nickname)
 
-    # 나를 팔로우하는 사람들
+    # 나를 팔로우하는 사람들 (following = target)
     qs = (
         Social.objects.filter(following=target)
         .select_related("follower")
@@ -195,7 +228,7 @@ def followers_list_ajax(request, nickname):
     for rel in qs:
         u = rel.follower
         profile = getattr(u, "profile", None)
-        img_url = profile.profile_img.url if profile and profile.profile_img else None
+        img_url = abs_url(request, profile.profile_img.url) if profile and getattr(profile, "profile_img", None) else None
 
         users_data.append(
             {
@@ -223,7 +256,8 @@ def followings_list_ajax(request, nickname):
     for rel in qs:
         u = rel.following
         profile = getattr(u, "profile", None)
-        img_url = profile.profile_img.url if profile and profile.profile_img else None
+        img_url = abs_url(request, profile.profile_img.url) if profile and getattr(profile, "profile_img", None) else None
+
 
         users_data.append(
             {
@@ -449,24 +483,32 @@ def follow_toggle(request, nickname):
 @login_required
 @require_POST
 def post_create(request):
-    """
-    게시글 작성
-    - form에서 name="title", name="content", name="share_trip" 사용
-    """
     title = request.POST.get('title', '').strip()
     content = request.POST.get('content', '').strip()
     image = request.FILES.get('share_trip')
 
+    post = None
     if title or content or image:
-        Post.objects.create(
+        post = Post.objects.create(
             writer=request.user,
             title=title,
             content=content,
             share_trip=image
         )
 
-    # 작성 후 내 프로필로 이동
+    if is_ajax(request):
+        return JsonResponse({
+            "success": True,
+            "post": {
+                "id": post.id if post else None,
+                "title": post.title if post else "",
+                "content": post.content if post else "",
+                "share_trip": post.share_trip.url if (post and post.share_trip) else None,
+            }
+        })
+
     return redirect('users:user_profile')
+
 
 @login_required
 @require_POST
@@ -504,14 +546,14 @@ def post_update_ajax(request, post_id):
 @login_required
 @require_POST
 def post_delete(request, post_id):
-    """
-    게시글 삭제 (본인 게시글만)
-    """
     post = get_object_or_404(Post, id=post_id, writer=request.user)
     post.delete()
 
-    # 삭제 후 돌아갈 곳 (현재 페이지)
+    if is_ajax(request):
+        return JsonResponse({"success": True, "id": post_id})
+
     return redirect(request.META.get('HTTP_REFERER', 'users:user_profile'))
+
 
 
 # =========================================================
@@ -670,10 +712,11 @@ def upload_profile_image(request):
         profile.save()
 
         return JsonResponse({
-            'success': True,
-            'image_url': profile.profile_img.url,
-            'message': '프로필 이미지가 성공적으로 업데이트되었습니다!'
+            "success": True,
+            "image_url": abs_url(request, profile.profile_img.url),
+            "message": "프로필 이미지가 성공적으로 업데이트되었습니다!",
         })
+
 
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
@@ -684,28 +727,30 @@ from django.db.models import Q
 @login_required
 def profile_search(request):
     query = request.GET.get("q", "").strip()
-
     if not query:
+        if is_ajax(request):
+            return JsonResponse({"found": False, "error": "검색어를 입력해주세요."}, status=400)
         messages.error(request, "검색어를 입력해주세요.")
         return redirect("users:user_profile")
 
-    # 공백 여러 개 → 하나로 정규화
     query_normalized = " ".join(query.split())
-
     user = (
         User.objects
-        .filter(
-            Q(nickname__iexact=query_normalized) |
-            Q(email__iexact=query_normalized)
-        )
+        .filter(Q(nickname__iexact=query_normalized) | Q(email__iexact=query_normalized))
         .first()
     )
 
     if not user:
+        if is_ajax(request):
+            return JsonResponse({"found": False, "error": "해당 사용자를 찾을 수 없습니다."}, status=404)
         messages.error(request, "해당 닉네임/이메일의 사용자를 찾을 수 없습니다.")
         return redirect("users:user_profile")
 
+    if is_ajax(request):
+        return JsonResponse({"found": True, "nickname": user.nickname})
+
     return redirect("users:profile_detail", nickname=user.nickname)
+
 
 # ========================================================
 # 설정 페이지
@@ -733,3 +778,71 @@ def settings_view(request):
         "form": form,
     }
     return render(request, "user/setting.html", context)
+
+
+def is_ajax(request):
+    return request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+
+
+@login_required
+def profile_me_api(request):
+    u = request.user
+    return _profile_payload(request, u)
+
+@login_required
+def profile_detail_api(request, nickname):
+    target = get_object_or_404(User, nickname=nickname)
+    return _profile_payload(request, target)
+
+def _profile_payload(request, target_user):
+    profile, _ = Profile.objects.get_or_create(user=target_user)
+
+    is_owner = (request.user == target_user)
+
+    follower_count = target_user.follower_set.count()
+    following_count = target_user.following_set.count()
+
+    is_following = False
+    if request.user.is_authenticated and not is_owner:
+      is_following = Social.objects.filter(follower=request.user, following=target_user).exists()
+
+    posts_qs = (
+        Post.objects.filter(writer=target_user)
+        .prefetch_related("likes")
+        .order_by("-id")
+    )
+
+    liked_post_ids = []
+    if request.user.is_authenticated:
+        liked_post_ids = list(request.user.likes.values_list("post_id", flat=True))
+
+    posts = []
+    for p in posts_qs:
+        posts.append({
+            "id": p.id,
+            "title": p.title or "",
+            "content": p.content or "",
+            "image": abs_url(request, p.share_trip.url) if p.share_trip else "",
+            "writer_username": p.writer.username or "",
+            "writer_nickname": p.writer.nickname or "",
+            "like_count": p.likes.count(),
+            "is_liked": (p.id in liked_post_ids),
+            "is_owner": (request.user == p.writer),
+        })
+
+    payload = {
+        "profile": {
+            "nickname": target_user.nickname or "",
+            "username": target_user.username or "",
+            "profile_img": abs_url(request, profile.profile_img.url) if profile.profile_img else "",
+            "follower_count": follower_count,
+            "following_count": following_count,
+            "is_owner": is_owner,
+            "is_following": is_following,
+        },
+        "posts": posts,
+    }
+    return JsonResponse(payload)
+
+

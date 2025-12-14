@@ -18,7 +18,7 @@ if env_path.is_file():
 
 SECRET_KEY = os.environ.get("django_secret_key")
 DEBUG = True
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 INSTALLED_APPS = [
     "daphne",
@@ -261,3 +261,4 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+

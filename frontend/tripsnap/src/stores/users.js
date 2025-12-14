@@ -1,5 +1,6 @@
 // src/stores/users.js
 import { defineStore } from 'pinia'
+import { getCsrfToken } from '@/utils/csrf'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
@@ -40,7 +41,7 @@ export const useUserStore = defineStore('user', {
       try {
         const res = await fetch(`${API_BASE}/api/auth/registration/`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
           credentials: 'include',
           body: JSON.stringify({ email, password1, password2 }),
         })
@@ -165,7 +166,6 @@ export const useUserStore = defineStore('user', {
       } finally {
         // ✅ 프론트 상태 정리
         this.user = null
-        this.isAuthenticated = false
         this.loading = false
       }
     },
