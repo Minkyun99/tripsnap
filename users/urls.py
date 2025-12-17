@@ -5,6 +5,9 @@ app_name = 'users'
 
 urlpatterns = [
 
+    # CSRF 쿠키 세팅 (Vue SPA에서 최초 1회 호출)
+    path('api/csrf/', views.csrf_cookie, name='csrf_cookie'),
+
     # ✅ 설정 페이지
     path('settings/', views.settings_view, name='settings'),
     

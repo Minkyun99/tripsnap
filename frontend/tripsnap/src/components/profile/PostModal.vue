@@ -1,133 +1,207 @@
-<script setup>
-import { ref } from 'vue'
-import { useProfileStore } from '../../stores/profile'
-
-const emit = defineEmits(['close'])
-const ps = useProfileStore()
-
-const title = ref('')
-const content = ref('')
-const file = ref(null)
-const isLoading = ref(false)
-const error = ref('')
-
-function onPick(e) {
-  file.value = e.target.files?.[0] || null
-}
-
-async function submit() {
-  error.value = ''
-  isLoading.value = true
-  try {
-    await ps.createPost({ title: title.value, content: content.value, file: file.value })
-    // 작성 후 내 프로필 데이터 재로딩
-    await ps.loadMyProfile()
-    emit('close')
-  } catch (e) {
-    error.value = e.message
-  } finally {
-    isLoading.value = false
-  }
-}
-</script>
-
 <template>
-  <div class="ts-overlay" @click.self="emit('close')">
-    <div class="ts-create-modal pixel-corners" @click.stop>
-      <h2 class="ts-title">게시글 작성</h2>
+  <div class="ts-overlay" @click.self="handleClose">
+    <div class="ts-modal">
+      <button class="ts-modal-close" type="button" @click="handleClose">✕</button>
 
-      <input class="ts-input" v-model="title" placeholder="제목" />
-      <textarea class="ts-textarea" v-model="content" rows="4" placeholder="내용"></textarea>
-      <input class="ts-input" type="file" @change="onPick" />
+      <div class="ts-modal-grid">
+        <!-- left: image -->
+        <div class="ts-modal-media">
+          <img v-if="post?.image" :src="post.image" alt="post image" />
+          <span v-else class="ts-placeholder">📸</span>
+        </div>
 
-      <p v-if="error" class="ts-error">{{ error }}</p>
+        <!-- right: body -->
+        <div class="ts-modal-body">
+          <div>
+            <h3 class="ts-modal-title">{{ post?.title }}</h3>
+            <p class="ts-modal-writer">@{{ post?.writer_username }}</p>
+            <p class="ts-modal-content">{{ post?.content }}</p>
 
-      <div class="ts-actions">
-        <button class="ts-btn ts-btn--pink" type="button" @click="submit" :disabled="isLoading">
-          {{ isLoading ? '업로드 중...' : '게시글 올리기' }}
-        </button>
-        <button class="ts-btn ts-btn--white" type="button" @click="emit('close')">취소</button>
+            <button
+              class="ts-modal-like"
+              :class="{ 'ts-modal-like--on': post?.is_liked }"
+              type="button"
+              @click="onToggleLike"
+            >
+              <span>{{ post?.is_liked ? '❤️' : '🤍' }}</span>
+              <span>{{ post?.like_count ?? 0 }}</span>
+            </button>
+          </div>
+
+          <!-- owner actions (내 게시글일 때만) -->
+          <div v-if="post?.is_owner" class="ts-owner-actions">
+            <button class="ts-btn ts-btn--pink" type="button" @click="enterEditMode">
+              게시글 수정
+            </button>
+            <button class="ts-danger-link" type="button" @click="onDeletePost">게시글 삭제</button>
+          </div>
+
+          <!-- edit mode -->
+          <div v-if="editMode" class="ts-edit-box">
+            <input class="ts-input" v-model="editTitle" placeholder="제목" />
+            <textarea
+              class="ts-textarea"
+              v-model="editContent"
+              rows="3"
+              placeholder="내용"
+            ></textarea>
+            <div class="ts-right">
+              <button class="ts-btn ts-btn--white" type="button" @click="cancelEdit">취소</button>
+              <button class="ts-btn ts-btn--pink" type="button" @click="saveEdit">저장</button>
+            </div>
+          </div>
+
+          <!-- comments -->
+          <div>
+            <p class="ts-comments-title">댓글</p>
+
+            <div class="ts-comments-box">
+              <div v-for="c in comments" :key="c.id" class="ts-comment-item">
+                <div class="ts-comment-row">
+                  <span class="ts-comment-writer">@{{ c.writer_nickname }}</span>
+
+                  <!-- comment content / edit -->
+                  <div class="ts-comment-body">
+                    <template v-if="editingCommentId === c.id">
+                      <input class="ts-input ts-input--sm" v-model="editingContent" />
+                    </template>
+                    <template v-else>
+                      <span class="ts-comment-text">{{ c.content }}</span>
+                    </template>
+                  </div>
+                </div>
+
+                <div class="ts-comment-meta">
+                  <span class="ts-comment-time">{{ c.created_at }}</span>
+
+                  <div v-if="c.is_owner" class="ts-comment-actions">
+                    <template v-if="editingCommentId === c.id">
+                      <button type="button" @click="confirmEdit(c.id)">저장</button>
+                      <button type="button" @click="cancelCommentEdit">취소</button>
+                    </template>
+                    <template v-else>
+                      <button type="button" @click="startEdit(c)">수정</button>
+                      <button type="button" @click="onDeleteComment(c.id)">삭제</button>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <p v-if="comments.length === 0" class="ts-muted">
+                아직 댓글이 없습니다. 첫 댓글을 남겨보세요!
+              </p>
+            </div>
+
+            <div class="ts-comment-compose">
+              <input
+                class="ts-input"
+                v-model="commentInput"
+                placeholder="댓글을 입력하세요..."
+                @keydown.enter.prevent="submit"
+              />
+              <button class="ts-btn ts-btn--pink" type="button" @click="submit">게시</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
-<style scoped lang="scss">
-$ts-border-brown: #d2691e;
-$ts-pink: #ff69b4;
-$ts-pink-hover: #ff1493;
+<script setup>
+import { computed, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useProfileStore } from '@/stores/profile'
 
-.pixel-corners {
-  border-radius: 1.25rem;
+const emit = defineEmits(['close'])
+
+const ps = useProfileStore()
+const { activePost, modalComments } = storeToRefs(ps)
+
+const post = computed(() => activePost.value)
+const comments = computed(() => modalComments.value || [])
+
+const commentInput = ref('')
+
+// 게시글 편집 모드
+const editMode = ref(false)
+const editTitle = ref('')
+const editContent = ref('')
+
+// 댓글 편집 모드
+const editingCommentId = ref(null)
+const editingContent = ref('')
+
+watch(
+  () => post.value,
+  (p) => {
+    if (!p) return
+    editMode.value = false
+    editTitle.value = p.title || ''
+    editContent.value = p.content || ''
+    editingCommentId.value = null
+    editingContent.value = ''
+    commentInput.value = ''
+  },
+  { immediate: true },
+)
+
+function handleClose() {
+  emit('close')
 }
-.ts-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 1rem;
-  display: grid;
-  place-items: center;
-  z-index: 60;
+
+async function onToggleLike() {
+  if (!post.value) return
+  await ps.toggleLike(post.value.id)
 }
-.ts-create-modal {
-  width: 100%;
-  max-width: 34rem;
-  background: #fff;
-  border: 4px solid $ts-border-brown;
-  padding: 1.25rem;
-  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.22);
+
+async function submit() {
+  if (!post.value) return
+  await ps.submitComment(post.value.id, commentInput.value)
+  commentInput.value = ''
 }
-.ts-title {
-  margin: 0 0 1rem;
-  font-size: 1.35rem;
-  font-weight: 900;
-  color: $ts-border-brown;
+
+function startEdit(c) {
+  editingCommentId.value = c.id
+  editingContent.value = c.content
 }
-.ts-input {
-  width: 100%;
-  padding: 0.7rem 0.85rem;
-  border-radius: 0.7rem;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  margin-bottom: 0.65rem;
+
+function cancelCommentEdit() {
+  editingCommentId.value = null
+  editingContent.value = ''
 }
-.ts-textarea {
-  width: 100%;
-  padding: 0.7rem 0.85rem;
-  border-radius: 0.7rem;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  margin-bottom: 0.65rem;
-  resize: vertical;
+
+async function confirmEdit(commentId) {
+  await ps.editComment(commentId, editingContent.value)
+  cancelCommentEdit()
 }
-.ts-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
+
+async function onDeleteComment(commentId) {
+  await ps.deleteComment(commentId)
 }
-.ts-btn {
-  padding: 0.65rem 1rem;
-  border-radius: 0.7rem;
-  font-weight: 900;
-  border: 2px solid $ts-border-brown;
-  cursor: pointer;
+
+function enterEditMode() {
+  editMode.value = true
 }
-.ts-btn--pink {
-  background: $ts-pink;
-  color: #fff;
-  &:hover {
-    background: $ts-pink-hover;
-  }
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+
+function cancelEdit() {
+  editMode.value = false
+  editTitle.value = post.value?.title || ''
+  editContent.value = post.value?.content || ''
 }
-.ts-btn--white {
-  background: #fff;
-  color: #6b4f2a;
+
+async function saveEdit() {
+  if (!post.value) return
+  await ps.updatePost(post.value.id, editTitle.value, editContent.value)
+  editMode.value = false
 }
-.ts-error {
-  margin: 0.5rem 0 0.75rem;
-  color: #b00020;
-  font-weight: 700;
+
+async function onDeletePost() {
+  if (!post.value) return
+  await ps.deletePost(post.value.id)
 }
+</script>
+
+<style scoped lang="scss">
+@use '@/assets/profile.scss' as *;
 </style>
