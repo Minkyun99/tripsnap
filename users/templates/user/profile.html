@@ -1,181 +1,1119 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>사용자 프로필 - TripSnap</title>
-    <!-- Tailwind CSS CDN 로드 -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Inter 폰트 사용 -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
-    <style>
-        /* 기본 폰트를 Inter로 설정 */
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f7f9fb;
-        }
-    </style>
-</head>
-<body class="min-h-screen antialiased">
+{% extends "base/index.html" %} {% load static %} {% block title %}{{
+target_user.nickname }} - 프로필{% endblock title %} {% block content %}
+<main class="p-6">
+  <div
+    class="max-w-5xl mx-auto bg-white/90 rounded-2xl border-4 border-[#D2691E] pixel-corners"
+  >
+    <!-- ===== 프로필 헤더 ===== -->
+    <div
+      class="bg-gradient-to-r from-[#FF69B4] to-[#FFB6C1] p-8 border-b-4 border-[#D2691E] flex flex-col md:flex-row gap-6 items-center relative"
+    >
+      <a
+        href="{% url 'users:settings' %}"
+        class="absolute top-3 right-3 bg-white/90 text-[#D2691E] rounded-full p-2 shadow hover:bg-white transition"
+      >
+        ⚙️
+      </a>
 
-    <!-- 프로필 섹션 컨테이너 -->
-    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
-        
-        <header class="text-center mb-10">
-            <h1 class="text-3xl font-bold text-gray-800 tracking-tight">마이 프로필</h1>
-            <p class="text-gray-500 mt-1">여행 기록을 관리하고 다른 사용자들과 소통해 보세요.</p>
-        </header>
+      <!-- PROFILE IMAGE -->
+      <div class="relative">
+        {% if profile.profile_img %}
+        <img
+          id="profileImage"
+          src="{{ profile.profile_img.url }}"
+          class="w-32 h-32 rounded-full ring-4 ring-white shadow-xl object-cover cursor-pointer"
+          {%
+          if
+          is_owner
+          %}onclick="openImagePopup()"
+          {%
+          endif
+          %}
+        />
+        {% else %}
+        <div
+          id="profileImage"
+          class="w-32 h-32 bg-white rounded-full ring-4 ring-white shadow-lg text-6xl flex justify-center items-center cursor-pointer"
+          {%
+          if
+          is_owner
+          %}onclick="openImagePopup()"
+          {%
+          endif
+          %}
+        >
+          🍞
+        </div>
+        {% endif %} {% if is_owner %}
+        <button
+          onclick="openImagePopup()"
+          class="absolute bottom-0 right-0 bg-[#FF69B4] text-white border-2 border-white rounded-full p-2 shadow"
+        >
+          ✏️
+        </button>
+        {% endif %}
+      </div>
 
-        <!-- 프로필 카드 (메인 컨텐츠) -->
-        <div class="bg-white rounded-xl shadow-2xl p-6 md:p-10 border border-gray-100/50">
-            
-            <!-- 상단 정보 및 아바타 -->
-            <div class="flex flex-col md:flex-row items-center md:items-start gap-8 border-b pb-8 mb-8">
-                
-                <!-- 아바타 영역 -->
-                <div class="flex-shrink-0 relative">
-                    <img id="profile-avatar" class="w-28 h-28 object-cover rounded-full ring-4 ring-indigo-500/50 shadow-lg transition duration-300 hover:ring-indigo-600/70 cursor-pointer" 
-                         src="https://placehold.co/112x112/4f46e5/ffffff?text=U" 
-                         alt="사용자 아바타">
-                    <!-- 온라인 상태 표시 (선택 사항) -->
-                    <span class="absolute bottom-1 right-1 block w-5 h-5 bg-green-400 border-2 border-white rounded-full"></span>
-                </div>
-                
-                <!-- 텍스트 정보 -->
-                <div class="flex-grow text-center md:text-left">
-                    <h2 class="text-3xl font-extrabold text-gray-900" id="user-name">여행자 김미래</h2>
-                    <p class="text-lg text-indigo-600 mt-1 font-medium" id="user-id">@trip_explorer</p>
-                    <p class="text-gray-500 mt-3 max-w-lg md:max-w-none" id="user-bio">
-                        세상의 모든 길 위를 걷고 싶어하는 디지털 노마드입니다. 기록은 순간을 영원하게 만들죠. 📸
-                    </p>
-                    
-                    <!-- 액션 버튼 -->
-                    <div class="mt-6 flex flex-wrap justify-center md:justify-start gap-3">
-                        <button onclick="toggleEditMode()" 
-                                class="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white font-semibold text-sm rounded-lg shadow-md hover:bg-indigo-700 transition duration-150 transform hover:scale-[1.02]">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zm-5.646 5.646a2 2 0 00-2.828 0l-3.22 3.22a.75.75 0 00-.236.425l-.25 1.5A.75.75 0 003 15.5l1.5-.25a.75.75 0 00.425-.236l3.22-3.22a2 2 0 000-2.828l-.5-.5z" />
-                            </svg>
-                            <span>프로필 수정</span>
-                        </button>
-                        <button class="flex items-center space-x-2 px-4 py-2 bg-white text-gray-700 font-semibold text-sm rounded-lg shadow-md border border-gray-300 hover:bg-gray-50 transition duration-150">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                            </svg>
-                            <span>계정 설정</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
+      <!-- PROFILE INFO -->
+      <div class="flex-grow text-center md:text-left text-white">
+        <h2 class="text-4xl font-extrabold mb-1">{{ target_user.nickname }}</h2>
+        <p class="text-lg opacity-80 mb-4">@{{ target_user.username }}</p>
 
-            <!-- 통계 및 배지 -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center mb-8">
-                
-                <!-- 통계 항목 1: 여행 횟수 -->
-                <div class="p-3 bg-indigo-50/50 rounded-lg shadow-inner">
-                    <p class="text-2xl font-bold text-gray-800" id="stat-trips">27</p>
-                    <p class="text-sm font-medium text-gray-500 mt-1">여행 횟수</p>
-                </div>
-                
-                <!-- 통계 항목 2: 총 게시물 -->
-                <div class="p-3 bg-indigo-50/50 rounded-lg shadow-inner">
-                    <p class="text-2xl font-bold text-gray-800" id="stat-posts">142</p>
-                    <p class="text-sm font-medium text-gray-500 mt-1">총 게시물</p>
-                </div>
+        <div class="flex gap-6 justify-center md:justify-start">
+          <!-- 팔로워 수 + 모달 -->
+          <button
+            type="button"
+            onclick="openFollowModal('followers')"
+            class="text-center cursor-pointer"
+          >
+            <p class="text-2xl font-bold underline" id="followerCount">
+              {{ follower_count }}
+            </p>
+            <p class="text-sm opacity-80">팔로워</p>
+          </button>
 
-                <!-- 통계 항목 3: 팔로워 -->
-                <div class="p-3 bg-indigo-50/50 rounded-lg shadow-inner">
-                    <p class="text-2xl font-bold text-gray-800" id="stat-followers">8.5K</p>
-                    <p class="text-sm font-medium text-gray-500 mt-1">팔로워</p>
-                </div>
-                
-                <!-- 통계 항목 4: 좋아요 획득 -->
-                <div class="p-3 bg-indigo-50/50 rounded-lg shadow-inner">
-                    <p class="text-2xl font-bold text-gray-800" id="stat-likes">21K</p>
-                    <p class="text-sm font-medium text-gray-500 mt-1">좋아요 합계</p>
-                </div>
-            </div>
-
-            <!-- 최근 활동 섹션 -->
-            <div>
-                <h3 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-4">최근 여행 기록 (가상)</h3>
-                
-                <ul class="space-y-4">
-                    <!-- 활동 항목 1 -->
-                    <li class="flex items-start p-3 bg-gray-50 rounded-lg transition duration-150 hover:bg-gray-100">
-                        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-sm font-bold">🗺️</div>
-                        <div class="ml-4 flex-grow">
-                            <p class="font-medium text-gray-900">제주도의 비밀 해변을 발견했습니다.</p>
-                            <p class="text-sm text-gray-500">2025년 11월 24일 · 5개의 새로운 사진</p>
-                        </div>
-                        <span class="text-xs text-gray-400 font-medium">1시간 전</span>
-                    </li>
-                    
-                    <!-- 활동 항목 2 -->
-                    <li class="flex items-start p-3 bg-gray-50 rounded-lg transition duration-150 hover:bg-gray-100">
-                        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-sm font-bold">💬</div>
-                        <div class="ml-4 flex-grow">
-                            <p class="font-medium text-gray-900">새로운 팔로워 3명이 생겼습니다.</p>
-                            <p class="text-sm text-gray-500">여행자 'SkyWalker'님 외 2명</p>
-                        </div>
-                        <span class="text-xs text-gray-400 font-medium">3일 전</span>
-                    </li>
-
-                    <!-- 활동 항목 3 -->
-                    <li class="flex items-start p-3 bg-gray-50 rounded-lg transition duration-150 hover:bg-gray-100">
-                        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-sm font-bold">💖</div>
-                        <div class="ml-4 flex-grow">
-                            <p class="font-medium text-gray-900">당신의 '스페인 열정' 게시물이 1000 좋아요를 달성했습니다!</p>
-                            <p class="text-sm text-gray-500">2025년 11월 19일</p>
-                        </div>
-                        <span class="text-xs text-gray-400 font-medium">5일 전</span>
-                    </li>
-                </ul>
-
-                <button class="mt-6 w-full text-center py-2 text-indigo-600 font-semibold rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition duration-150">
-                    모든 활동 보기
-                </button>
-            </div>
-            
+          <!-- 팔로잉 수 + 모달 -->
+          <button
+            type="button"
+            onclick="openFollowModal('followings')"
+            class="text-center cursor-pointer"
+          >
+            <p class="text-2xl font-bold underline" id="followingCount">
+              {{ following_count }}
+            </p>
+            <p class="text-sm opacity-80">팔로잉</p>
+          </button>
         </div>
 
+        <!-- ===== FOLLOWERS / FOLLOWINGS MODAL ===== -->
+        <div
+          id="followModal"
+          class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+        >
+          <div class="bg-white rounded-2xl max-w-sm w-full p-6 relative">
+            <button
+              type="button"
+              onclick="closeFollowModal()"
+              class="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-black/60 text-white text-xs"
+            >
+              ✕
+            </button>
+
+            <h3
+              id="followModalTitle"
+              class="text-xl font-bold text-[#D2691E] mb-4"
+            >
+              팔로워
+            </h3>
+
+            <div
+              id="followList"
+              class="space-y-3 max-h-80 overflow-y-auto text-sm"
+            >
+              <!-- JS 로 채움 -->
+            </div>
+          </div>
+        </div>
+
+        {% if not is_owner %}
+        <button
+          id="followBtn"
+          onclick="toggleFollow('{{ target_user.nickname }}')"
+          class="mt-4 px-6 py-3 text-lg font-bold rounded-xl pixel-corners border-3 transition shadow {% if is_following %}bg-white text-[#D2691E] border-[#D2691E]{% else %}bg-[#FF69B4] text-white border-[#D2691E]{% endif %}"
+        >
+          {% if is_following %}✔ 팔로잉{% else %}+ 팔로우{% endif %}
+        </button>
+        {% endif %}
+      </div>
     </div>
 
-    <!-- 간단한 JavaScript (프로필 수정 모드 토글 예시) -->
-    <script>
-        // 이 함수는 '프로필 수정' 버튼을 눌렀을 때 실행됩니다.
-        function toggleEditMode() {
-            const userName = document.getElementById('user-name');
-            const userBio = document.getElementById('user-bio');
-            const button = document.querySelector('button[onclick="toggleEditMode()"]');
-            
-            // 현재 텍스트를 저장합니다.
-            const currentName = userName.textContent;
-            const currentBio = userBio.textContent;
+    <!-- ===== 다른 사람 프로필 검색 바 ===== -->
+    <div class="px-8 pt-6">
+      <form
+        method="get"
+        action="{% url 'users:profile_search' %}"
+        class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-[#FFF5E6] px-4 py-3 rounded-xl border border-[#D2691E]/40"
+      >
+        <label class="text-sm font-semibold text-[#8B4513] sm:w-auto">
+          다른 사람 프로필 검색
+        </label>
+        <input
+          type="text"
+          name="q"
+          placeholder="닉네임 또는 이메일을 입력하세요"
+          class="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF69B4]"
+        />
+        <button
+          type="submit"
+          class="px-4 py-2 bg-[#FF69B4] text-white text-sm font-bold rounded-lg border-2 border-[#D2691E] hover:bg-[#FF1493] transition"
+        >
+          검색
+        </button>
+      </form>
+    </div>
 
-            // 수정 모드 활성화 (텍스트를 입력 필드로 변경)
-            if (userName.tagName !== 'INPUT') {
-                userName.outerHTML = `<input id="user-name" type="text" value="${currentName}" class="text-3xl font-extrabold text-gray-900 border border-indigo-300 rounded-md p-1 w-full text-center md:text-left focus:ring-indigo-500 focus:border-indigo-500">`;
-                userBio.outerHTML = `<textarea id="user-bio" rows="3" class="text-gray-500 mt-3 max-w-lg md:max-w-none border border-indigo-300 rounded-md p-2 w-full focus:ring-indigo-500 focus:border-indigo-500">${currentBio}</textarea>`;
-                button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg><span>저장하기</span>';
-                button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-                button.classList.add('bg-green-600', 'hover:bg-green-700');
-            } else {
-                // 수정 모드 비활성화 (입력 필드를 다시 텍스트로 변경)
-                const newName = document.getElementById('user-name').value;
-                const newBio = document.getElementById('user-bio').value;
+    <!-- ===== 게시글 업로드 (본인만) ===== -->
+    {% if is_owner %}
+    <div class="p-6">
+      <form
+        method="post"
+        action="{% url 'users:post_create' %}"
+        enctype="multipart/form-data"
+        class="bg-[#FFF5E6] p-5 border-2 border-dashed border-[#D2691E] rounded-xl space-y-3"
+      >
+        {% csrf_token %}
+        <input
+          name="title"
+          placeholder="제목 입력"
+          class="w-full px-4 py-2 border rounded-lg"
+        />
+        <textarea
+          name="content"
+          class="w-full px-4 py-2 border rounded-lg"
+          rows="2"
+          placeholder="내용 작성"
+        ></textarea>
+        <input type="file" name="share_trip" class="w-full" />
+        <div class="text-right">
+          <button
+            class="bg-[#FF69B4] text-white px-6 py-2 rounded-xl border-2 border-[#D2691E]"
+          >
+            게시글 올리기
+          </button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
 
-                userName.outerHTML = `<h2 class="text-3xl font-extrabold text-gray-900" id="user-name">${newName}</h2>`;
-                userBio.outerHTML = `<p class="text-gray-500 mt-3 max-w-lg md:max-w-none" id="user-bio">${newBio}</p>`;
-                
-                button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zm-5.646 5.646a2 2 0 00-2.828 0l-3.22 3.22a.75.75 0 00-.236.425l-.25 1.5A.75.75 0 003 15.5l1.5-.25a.75.75 0 00.425-.236l3.22-3.22a2 2 0 000-2.828l-.5-.5z" clip-rule="evenodd" fill-rule="evenodd" /></svg><span>프로필 수정</span>';
-                button.classList.remove('bg-green-600', 'hover:bg-green-700');
-                button.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+    <!-- ===== 게시글 그리드 ===== -->
+    <div class="p-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for post in posts %}
+        <!-- 카드 전체 클릭 가능 -->
+        <div
+          class="rounded-xl border bg-white overflow-hidden cursor-pointer post-card"
+          data-id="{{ post.id }}"
+          data-img="{% if post.share_trip %}{{ post.share_trip.url }}{% endif %}"
+          data-title="{{ post.title|escapejs }}"
+          data-content="{{ post.content|escapejs }}"
+          data-writer="{{ post.writer.username }}"
+          data-likes="{{ post.likes.count }}"
+          data-liked="{% if post.id in liked_post_ids %}true{% else %}false{% endif %}"
+          onclick="openPostModal(this)"
+        >
+          {% if post.share_trip %}
+          <img
+            src="{{ post.share_trip.url }}"
+            class="w-full h-48 object-cover"
+          />
+          {% else %}
+          <div
+            class="w-full h-48 bg-[#FFE8CC] text-5xl flex items-center justify-center"
+          >
+            📸
+          </div>
+          {% endif %}
 
-                // TODO: 여기에 실제 서버(Django 뷰)에 변경된 데이터를 저장하는 AJAX 요청 코드를 추가해야 합니다.
-                console.log("프로필 정보가 저장되었습니다:", { name: newName, bio: newBio });
-            }
+          <div class="p-4">
+            <h4 class="font-bold text-[#D2691E] truncate">{{ post.title }}</h4>
+            <p class="text-sm text-[#8B4513] line-clamp-2 mb-2">
+              {{ post.content }}
+            </p>
+
+            <button
+              id="likeBtn-{{ post.id }}"
+              onclick="event.stopPropagation(); toggleLike({{ post.id }})"
+              class="flex items-center gap-1 text-sm px-3 py-1 border rounded-full transition {% if post.id in liked_post_ids %} bg-[#FF69B4] text-white border-[#FF69B4] {% else %} bg-white text-[#FF69B4] border-[#FF69B4] {% endif %}"
+            >
+              <span id="likeIcon-{{ post.id }}">
+                {% if post.id in liked_post_ids %}❤️{% else %}🤍{% endif %}
+              </span>
+              <span id="likeCount-{{ post.id }}">{{ post.likes.count }}</span>
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ===== 게시글 상세 모달 ===== -->
+<div
+  id="postModal"
+  class="hidden fixed inset-0 bg-black/50 snel flex justify-center items-center p-4 z-50"
+  onclick="overlayClose(event)"
+>
+  <div
+    class="bg-white max-w-3xl w-full rounded-2xl overflow-hidden relative"
+    onclick="event.stopPropagation()"
+  >
+    <!-- 우측 상단 X 버튼 -->
+    <button
+      onclick="closePostModal()"
+      class="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white text-sm hover:bg-black/80 transition"
+    >
+      ✕
+    </button>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2">
+      <!-- 이미지 영역 -->
+      <div
+        class="bg-black flex items-center justify-center"
+        id="modalImageContainer"
+      >
+        <img id="modalImage" class="w-full h-full object-contain" />
+        <span
+          id="modalPlaceholder"
+          class="text-6xl text-white hidden select-none"
+        >
+          📸
+        </span>
+      </div>
+
+      <!-- 텍스트 / 버튼 / 댓글 영역 -->
+      <div class="p-6 flex flex-col justify-between">
+        <div>
+          <!-- 보기 영역 -->
+          <div id="modalViewArea">
+            <h3 class="text-2xl font-bold text-[#D2691E]" id="modalTitle"></h3>
+            <p class="text-sm text-gray-500 mt-1" id="modalWriter"></p>
+            <p class="mt-3 text-[#6B4F2A]" id="modalContent"></p>
+          </div>
+
+          <!-- 수정 영역 (숨김) -->
+          <div id="modalEditArea" class="hidden space-y-2">
+            <input
+              id="modalEditTitle"
+              type="text"
+              class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF69B4]"
+              placeholder="제목을 입력하세요"
+            />
+            <textarea
+              id="modalEditContent"
+              rows="4"
+              class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF69B4]"
+              placeholder="내용을 입력하세요"
+            ></textarea>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                onclick="submitPostEdit()"
+                class="px-4 py-2 bg-[#FF69B4] text-white rounded-lg text-sm font-bold border-2 border-[#D2691E]"
+              >
+                수정 저장
+              </button>
+              <button
+                type="button"
+                onclick="cancelPostEdit()"
+                class="px-4 py-2 bg-white text-[#8B4513] rounded-lg text-sm font-bold border border-[#D2691E]"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+
+          <!-- 좋아요 버튼 (댓글 위) -->
+          <div class="mt-4">
+            <button
+              id="modalLikeBtn"
+              onclick=""
+              class="flex items-center gap-2 text-lg px-4 py-2 rounded-full border-2 bg-white text-[#FF69B4] border-[#FF69B4]"
+            >
+              <span id="modalLikeIcon">🤍</span>
+              <span id="modalLikeCount">0</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 댓글 리스트 -->
+        <div class="mt-4">
+          <h4 class="font-semibold text-[#D2691E] mb-2">댓글</h4>
+          <div
+            id="modalComments"
+            class="max-h-40 overflow-y-auto space-y-2 text-sm"
+          >
+            <!-- JS로 채워짐 -->
+          </div>
+        </div>
+
+        <!-- 댓글 입력 -->
+        <div class="mt-3 flex items-center gap-2">
+          <input
+            id="commentInput"
+            type="text"
+            placeholder="댓글을 입력하세요..."
+            class="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#FF69B4]"
+          />
+          <button
+            type="button"
+            onclick="submitComment()"
+            class="px-4 py-2 bg-[#FF69B4] text-white rounded-lg text-sm font-bold border-2 border-[#D2691E] hover:bg-[#FF1493] transition"
+          >
+            게시
+          </button>
+        </div>
+
+        <!-- 게시글 수정/삭제 (작성자만 노출) -->
+        <div id="modalOwnerActions" class="mt-4 hidden flex gap-3 items-center">
+          <button
+            type="button"
+            id="editPostBtn"
+            class="text-sm px-3 py-2 rounded-lg bg-[#FF69B4] text-white font-bold border border-[#D2691E]"
+          >
+            게시글 수정
+          </button>
+          <form method="post" id="deletePostForm">
+            {% csrf_token %}
+            <button class="text-red-600 font-bold text-sm">게시글 삭제</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PROFILE IMAGE UPLOAD MODAL ===== -->
+<div
+  id="imageModal"
+  class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+>
+  <div
+    class="bg-white p-8 rounded-xl pixel-corners border-4 border-[#D2691E] max-w-md w-full"
+  >
+    <h2 class="text-2xl font-bold text-center text-[#D2691E] mb-4">
+      프로필 이미지 변경
+    </h2>
+
+    <div
+      id="imagePreview"
+      class="w-48 h-48 mx-auto bg-[#FFE8CC] rounded-full border-4 border-[#D2691E] flex items-center justify-center overflow-hidden"
+    >
+      <span class="text-6xl">🍞</span>
+    </div>
+
+    <input type="file" id="imageInput" accept="image/*" class="hidden" />
+
+    <div class="mt-6 flex gap-3">
+      <button
+        onclick="document.getElementById('imageInput').click()"
+        class="flex-1 bg-[#FF69B4] text-white py-3 rounded-xl font-bold border-2 border-[#D2691E]"
+      >
+        이미지 선택
+      </button>
+      <button
+        onclick="uploadImage()"
+        id="uploadButton"
+        class="flex-1 bg-green-500 text-white py-3 rounded-xl font-bold border-2 border-green-700 disabled:opacity-50"
+        disabled
+      >
+        업로드
+      </button>
+    </div>
+
+    <button
+      onclick="closeImagePopup()"
+      class="w-full mt-4 py-3 bg-white text-[#8B4513] border-2 border-[#D2691E] rounded-xl font-bold"
+    >
+      취소
+    </button>
+  </div>
+</div>
+{% endblock content %} {% block extra_script %}
+<script>
+  let currentPostId = null;
+  let selectedImg = null;
+  const CSRF_TOKEN = "{{ csrf_token }}";
+
+  function goToProfile(nickname) {
+    const encoded = encodeURIComponent(nickname);
+    window.location.href = `/users/profile/${encoded}/`;
+  }
+
+  /* ==============================
+     오버레이(배경) 클릭 시 모달 닫기
+  ============================== */
+  function overlayClose(event) {
+    if (event.target.id === "postModal") {
+      closePostModal();
+    }
+  }
+
+  /* ==============================
+     팔로우 AJAX
+  ============================== */
+  async function toggleFollow(nickname) {
+    try {
+      const response = await fetch(`/users/follow/${nickname}/ajax/`, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": CSRF_TOKEN,
+        },
+      });
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (!data.success) {
+        console.error(data.error || "팔로우 처리 실패");
+        return;
+      }
+
+      const btn = document.getElementById("followBtn");
+      const followerCount = document.getElementById("followerCount");
+
+      followerCount.textContent = data.follower_count;
+
+      if (data.is_following) {
+        btn.textContent = "✔ 팔로잉";
+        btn.className =
+          "mt-4 px-6 py-3 text-lg font-bold rounded-xl pixel-corners border-3 bg-white text-[#D2691E] border-[#D2691E]";
+      } else {
+        btn.textContent = "+ 팔로우";
+        btn.className =
+          "mt-4 px-6 py-3 text-lg font-bold rounded-xl pixel-corners border-3 bg-[#FF69B4] text-white border-[#D2691E]";
+      }
+    } catch (e) {
+      console.error("팔로우 토글 에러:", e);
+    }
+  }
+
+  /* ==============================
+     좋아요 AJAX (카드)
+  ============================== */
+  async function toggleLike(postId) {
+    try {
+      const response = await fetch(`/users/post/${postId}/like-toggle/ajax/`, {
+        method: "POST",
+        headers: { "X-CSRFToken": CSRF_TOKEN },
+      });
+
+      if (!response.ok) return;
+      const data = await response.json();
+
+      const btn = document.getElementById(`likeBtn-${postId}`);
+      const icon = document.getElementById(`likeIcon-${postId}`);
+      const count = document.getElementById(`likeCount-${postId}`);
+      const cardEl = document.querySelector(`.post-card[data-id="${postId}"]`);
+
+      if (data.is_liked) {
+        icon.textContent = "❤️";
+        btn.className =
+          "flex items-center gap-1 text-sm px-3 py-1 border rounded-full bg-[#FF69B4] text-white border-[#FF69B4]";
+        if (cardEl) {
+          cardEl.dataset.liked = "true";
         }
-    </script>
-</body>
-</html>
+      } else {
+        icon.textContent = "🤍";
+        btn.className =
+          "flex items-center gap-1 text-sm px-3 py-1 border rounded-full bg-white text-[#FF69B4] border-[#FF69B4]";
+        if (cardEl) {
+          cardEl.dataset.liked = "false";
+        }
+      }
+
+      count.textContent = data.like_count;
+      if (cardEl) {
+        cardEl.dataset.likes = data.like_count;
+      }
+
+      // 모달이 열려 있다면 모달 쪽도 업데이트
+      const modal = document.getElementById("postModal");
+      if (!modal.classList.contains("hidden") && currentPostId == postId) {
+        const modalIcon = document.getElementById("modalLikeIcon");
+        const modalBtn = document.getElementById("modalLikeBtn");
+        const modalCount = document.getElementById("modalLikeCount");
+
+        modalCount.textContent = data.like_count;
+        if (data.is_liked) {
+          modalIcon.textContent = "❤️";
+          modalBtn.className =
+            "flex items-center gap-2 text-lg px-4 py-2 rounded-full border-2 bg-[#FF69B4] text-white border-[#FF69B4]";
+        } else {
+          modalIcon.textContent = "🤍";
+          modalBtn.className =
+            "flex items-center gap-2 text-lg px-4 py-2 rounded-full border-2 bg-white text-[#FF69B4] border-[#FF69B4]";
+        }
+      }
+    } catch (e) {
+      console.error("좋아요 토글 에러:", e);
+    }
+  }
+
+  /* ==============================
+     게시글 상세보기 모달 열기
+  ============================== */
+  function resetPostEditMode() {
+    document.getElementById("modalViewArea").classList.remove("hidden");
+    document.getElementById("modalEditArea").classList.add("hidden");
+  }
+
+  function enterPostEditMode() {
+    document.getElementById("modalViewArea").classList.add("hidden");
+    document.getElementById("modalEditArea").classList.remove("hidden");
+  }
+
+  function cancelPostEdit() {
+    resetPostEditMode();
+  }
+
+  function openPostModal(el) {
+    const id = el.dataset.id;
+    currentPostId = id;
+
+    const imgUrl = el.dataset.img;
+    const title = el.dataset.title;
+    const content = el.dataset.content;
+    const writerUser = el.dataset.writer;
+    const likeCount = parseInt(el.dataset.likes, 10) || 0;
+    const liked = el.dataset.liked === "true";
+
+    document.getElementById("postModal").classList.remove("hidden");
+
+    const modalImg = document.getElementById("modalImage");
+    const modalPlaceholder = document.getElementById("modalPlaceholder");
+
+    if (imgUrl) {
+      modalImg.src = imgUrl;
+      modalImg.classList.remove("hidden");
+      modalPlaceholder.classList.add("hidden");
+    } else {
+      modalImg.src = "";
+      modalImg.classList.add("hidden");
+      modalPlaceholder.classList.remove("hidden");
+    }
+
+    // 보기 영역 데이터
+    document.getElementById("modalTitle").textContent = title;
+    document.getElementById("modalWriter").textContent = "@" + writerUser;
+    document.getElementById("modalContent").textContent = content;
+    document.getElementById("modalLikeCount").textContent = likeCount;
+
+    // 수정 영역 기본값
+    document.getElementById("modalEditTitle").value = title;
+    document.getElementById("modalEditContent").value = content;
+
+    const icon = document.getElementById("modalLikeIcon");
+    const btn = document.getElementById("modalLikeBtn");
+
+    if (liked) {
+      icon.textContent = "❤️";
+      btn.className =
+        "flex items-center gap-2 text-lg px-4 py-2 rounded-full border-2 bg-[#FF69B4] text-white border-[#FF69B4]";
+    } else {
+      icon.textContent = "🤍";
+      btn.className =
+        "flex items-center gap-2 text-lg px-4 py-2 rounded-full border-2 bg-white text-[#FF69B4] border-[#FF69B4]";
+    }
+
+    btn.setAttribute("onclick", `toggleModalLike(${id})`);
+
+    const ownerActions = document.getElementById("modalOwnerActions");
+    if ("{{ user.username }}" === writerUser) {
+      ownerActions.classList.remove("hidden");
+      document.getElementById(
+        "deletePostForm"
+      ).action = `/users/post/${id}/delete/`;
+      document.getElementById("editPostBtn").onclick = enterPostEditMode;
+    } else {
+      ownerActions.classList.add("hidden");
+    }
+
+    // 보기 모드로 초기화
+    resetPostEditMode();
+
+    // 댓글 로딩
+    loadComments(id);
+  }
+
+  function closePostModal() {
+    const input = document.getElementById("commentInput");
+    if (input) input.value = "";
+    document.getElementById("modalComments").innerHTML = "";
+    document.getElementById("postModal").classList.add("hidden");
+  }
+
+  /* ==============================
+     게시글 수정 저장 AJAX
+  ============================== */
+  async function submitPostEdit() {
+    if (!currentPostId) return;
+
+    const titleInput = document.getElementById("modalEditTitle");
+    const contentInput = document.getElementById("modalEditContent");
+
+    const title = titleInput.value.trim();
+    const content = contentInput.value.trim();
+
+    if (!title) {
+      alert("제목을 입력하세요.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/users/post/${currentPostId}/update/ajax/`, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": CSRF_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ title, content }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "게시글 수정에 실패했습니다.");
+        return;
+      }
+
+      document.getElementById("modalTitle").textContent = data.post.title;
+      document.getElementById("modalContent").textContent = data.post.content;
+
+      const cardEl = document.querySelector(
+        `.post-card[data-id="${currentPostId}"]`
+      );
+      if (cardEl) {
+        cardEl.dataset.title = data.post.title;
+        cardEl.dataset.content = data.post.content;
+
+        const titleEl = cardEl.querySelector("h4");
+        const contentEl = cardEl.querySelector("p.text-sm");
+        if (titleEl) titleEl.textContent = data.post.title;
+        if (contentEl) contentEl.textContent = data.post.content;
+      }
+
+      resetPostEditMode();
+      alert("게시글이 수정되었습니다.");
+    } catch (e) {
+      console.error("게시글 수정 에러:", e);
+      alert("게시글 수정 중 오류가 발생했습니다.");
+    }
+  }
+
+  /* ==============================
+     댓글 렌더링 공통 함수
+  ============================== */
+  function renderComment(c) {
+    const wrap = document.getElementById("modalComments");
+    const div = document.createElement("div");
+    div.className = "flex items-start gap-2";
+    div.dataset.commentId = c.id;
+
+    let ownerButtons = "";
+    if (c.is_owner) {
+      ownerButtons = `
+      <div class="mt-1 space-x-2 text-[11px] text-gray-400">
+        <button type="button"
+                onclick="startEditComment(${c.id})"
+                class="hover:underline">
+          수정
+        </button>
+        <button type="button"
+                onclick="deleteComment(${c.id})"
+                class="hover:underline text-red-500">
+          삭제
+        </button>
+      </div>
+    `;
+    }
+
+    div.innerHTML = `
+    <div class="flex-1">
+      <a
+        href="/users/profile/${encodeURIComponent(c.writer_nickname)}/"
+        class="font-semibold text-[#D2691E] text-xs hover:underline"
+      >
+        @${c.writer_nickname}
+      </a>
+      <p id="commentContent-${c.id}"
+         class="text-sm text-[#6B4F2A] break-words">
+        ${c.content}
+      </p>
+      <p class="text-[10px] text-gray-400">${c.created_at}</p>
+      <div id="commentButtons-${c.id}">
+        ${ownerButtons}
+      </div>
+    </div>
+  `;
+
+    wrap.appendChild(div);
+  }
+
+  /* ==============================
+     댓글 목록 로딩
+  ============================== */
+  async function loadComments(postId) {
+    try {
+      const res = await fetch(`/users/post/${postId}/comments/ajax/`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const wrap = document.getElementById("modalComments");
+      wrap.innerHTML = "";
+
+      if (!data.comments || data.comments.length === 0) {
+        wrap.innerHTML =
+          '<p class="text-xs text-gray-400">아직 댓글이 없습니다. 첫 댓글을 남겨보세요!</p>';
+        return;
+      }
+
+      data.comments.forEach((c) => {
+        renderComment(c); // 🔥 여기
+      });
+    } catch (e) {
+      console.error("댓글 로딩 에러:", e);
+    }
+  }
+
+  /* ==============================
+     댓글 등록 AJAX
+  ============================== */
+  async function submitComment() {
+    const input = document.getElementById("commentInput");
+    const content = input.value.trim();
+    if (!content) return;
+    if (!currentPostId) return;
+
+    try {
+      const res = await fetch(`/users/post/${currentPostId}/comments/ajax/`, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": CSRF_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: content }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        alert(data.error || "댓글 등록에 실패했습니다.");
+        return;
+      }
+
+      input.value = "";
+      renderComment(data.comment); // 🔥 새 댓글도 동일하게 렌더
+    } catch (e) {
+      console.error("댓글 등록 에러:", e);
+      alert("댓글 등록 중 오류가 발생했습니다.");
+    }
+  }
+
+  /* ==============================
+     댓글 수정/삭제 JS
+  ============================== */
+  function startEditComment(commentId) {
+    const contentEl = document.getElementById(`commentContent-${commentId}`);
+    const oldContent = contentEl.textContent;
+
+    // input으로 전환
+    contentEl.innerHTML = `
+    <input id="editInput-${commentId}"
+           type="text"
+           value="${oldContent}"
+           class="w-full px-2 py-1 border rounded text-sm">
+  `;
+
+    // 수정 / 취소 버튼 생성
+    const btnArea = document.getElementById(`commentButtons-${commentId}`);
+    btnArea.innerHTML = `
+    <button onclick="saveEditComment(${commentId})"
+            class="text-xs text-green-600 font-bold hover:underline">
+      저장
+    </button>
+    <button onclick="cancelEditComment(${commentId}, '${oldContent.replace(
+      /'/g,
+      "\\'"
+    )}')"
+            class="text-xs text-gray-500 hover:underline">
+      취소
+    </button>
+  `;
+  }
+
+  async function saveEditComment(commentId) {
+    const inputEl = document.getElementById(`editInput-${commentId}`);
+    const newContent = inputEl.value.trim();
+    if (!newContent) return;
+
+    try {
+      const res = await fetch(`/users/comment/${commentId}/edit/ajax/`, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": CSRF_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: newContent }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "수정 실패");
+        return;
+      }
+
+      const contentEl = document.getElementById(`commentContent-${commentId}`);
+      contentEl.textContent = newContent;
+
+      // 버튼 상태 복구
+      document.getElementById(`commentButtons-${commentId}`).innerHTML = `
+      <button onclick="startEditComment(${commentId})"
+              class="hover:underline text-xs">
+        수정
+      </button>
+      <button onclick="deleteComment(${commentId})"
+              class="hover:underline text-xs text-red-500">
+        삭제
+      </button>
+    `;
+    } catch (e) {
+      console.error("댓글 수정 실패:", e);
+    }
+  }
+
+  function cancelEditComment(commentId, oldContent) {
+    const contentEl = document.getElementById(`commentContent-${commentId}`);
+    contentEl.textContent = oldContent;
+
+    document.getElementById(`commentButtons-${commentId}`).innerHTML = `
+    <button onclick="startEditComment(${commentId})"
+            class="hover:underline text-xs">
+      수정
+    </button>
+    <button onclick="deleteComment(${commentId})"
+            class="hover:underline text-xs text-red-500">
+      삭제
+    </button>
+  `;
+  }
+
+  function deleteComment(commentId) {
+    if (!confirm("정말로 이 댓글을 삭제하시겠습니까?")) return;
+
+    fetch(`/users/comment/${commentId}/delete/ajax/`, {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": CSRF_TOKEN,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) {
+          alert(data.error || "댓글 삭제에 실패했습니다.");
+          return;
+        }
+
+        const commentEl = document.querySelector(
+          `div[data-comment-id="${commentId}"]`
+        );
+        if (commentEl) {
+          commentEl.remove();
+        }
+      })
+      .catch((e) => {
+        console.error("댓글 삭제 에러:", e);
+      });
+  }
+
+  /* ==============================
+     좋아요 AJAX (모달 내부)
+  ============================== */
+  async function toggleModalLike(postId) {
+    try {
+      const response = await fetch(`/users/post/${postId}/like-toggle/ajax/`, {
+        method: "POST",
+        headers: { "X-CSRFToken": CSRF_TOKEN },
+      });
+
+      if (!response.ok) return;
+      const data = await response.json();
+
+      // 모달 UI
+      const modalCount = document.getElementById("modalLikeCount");
+      const modalIcon = document.getElementById("modalLikeIcon");
+      const modalBtn = document.getElementById("modalLikeBtn");
+
+      modalCount.textContent = data.like_count;
+
+      if (data.is_liked) {
+        modalIcon.textContent = "❤️";
+        modalBtn.className =
+          "flex items-center gap-2 text-lg px-4 py-2 rounded-full border-2 bg-[#FF69B4] text-white border-[#FF69B4]";
+      } else {
+        modalIcon.textContent = "🤍";
+        modalBtn.className =
+          "flex items-center gap-2 text-lg px-4 py-2 rounded-full border-2 bg-white text-[#FF69B4] border-[#FF69B4]";
+      }
+
+      // 카드 UI
+      const icon = document.getElementById(`likeIcon-${postId}`);
+      const count = document.getElementById(`likeCount-${postId}`);
+      const btn = document.getElementById(`likeBtn-${postId}`);
+      const cardEl = document.querySelector(`.post-card[data-id="${postId}"]`);
+
+      if (data.is_liked) {
+        icon.textContent = "❤️";
+        btn.className =
+          "flex items-center gap-1 text-sm px-3 py-1 border rounded-full bg-[#FF69B4] text-white border-[#FF69B4]";
+        if (cardEl) cardEl.dataset.liked = "true";
+      } else {
+        icon.textContent = "🤍";
+        btn.className =
+          "flex items-center gap-1 text-sm px-3 py-1 border rounded-full bg-white text-[#FF69B4] border-[#FF69B4]";
+        if (cardEl) cardEl.dataset.liked = "false";
+      }
+
+      count.textContent = data.like_count;
+      if (cardEl) {
+        cardEl.dataset.likes = data.like_count;
+      }
+    } catch (e) {
+      console.error("모달 좋아요 토글 에러:", e);
+    }
+  }
+
+  /* ==============================
+     프로필 이미지 업로드 모달
+  ============================== */
+  function openImagePopup() {
+    document.getElementById("imageModal").classList.remove("hidden");
+  }
+
+  function closeImagePopup() {
+    document.getElementById("imageModal").classList.add("hidden");
+  }
+
+  document.getElementById("imageInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    selectedImg = file;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      document.getElementById(
+        "imagePreview"
+      ).innerHTML = `<img src="${evt.target.result}" class="w-full h-full object-cover">`;
+      document.getElementById("uploadButton").disabled = false;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  async function uploadImage() {
+    if (!selectedImg) return;
+    const reader = new FileReader();
+    reader.onloadend = async function () {
+      const response = await fetch("{% url 'users:upload_profile_image' %}", {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": CSRF_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ image: reader.result }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        document.getElementById("profileImage").src =
+          data.image_url + "?t=" + new Date().getTime();
+        closeImagePopup();
+      } else {
+        alert(data.error || "프로필 이미지 업로드에 실패했습니다.");
+      }
+    };
+    reader.readAsDataURL(selectedImg);
+  }
+
+  /* ==============================
+     댓글 input 엔터키로 전송
+  ============================== */
+  document.addEventListener("DOMContentLoaded", function () {
+    const commentInput = document.getElementById("commentInput");
+    if (commentInput) {
+      commentInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submitComment();
+        }
+      });
+    }
+  });
+
+  /* ==============================
+     팔로우/팔로잉 모달
+  ============================== */
+  function closeFollowModal() {
+    const modal = document.getElementById("followModal");
+    if (modal) modal.classList.add("hidden");
+  }
+
+  async function openFollowModal(type) {
+    const modal = document.getElementById("followModal");
+    const titleEl = document.getElementById("followModalTitle");
+    const listEl = document.getElementById("followList");
+
+    if (!modal || !titleEl || !listEl) return;
+
+    const nickname = "{{ target_user.nickname|escapejs }}";
+
+    let url = "";
+    if (type === "followers") {
+      titleEl.textContent = "팔로워";
+      url = `/users/profile/${encodeURIComponent(nickname)}/followers/ajax/`;
+    } else {
+      titleEl.textContent = "팔로잉";
+      url = `/users/profile/${encodeURIComponent(nickname)}/followings/ajax/`;
+    }
+
+    modal.classList.remove("hidden");
+    listEl.innerHTML = '<p class="text-gray-400 text-xs">불러오는 중...</p>';
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        listEl.innerHTML =
+          '<p class="text-red-500 text-xs">목록을 불러오지 못했습니다.</p>';
+        return;
+      }
+
+      const data = await res.json();
+      const users = data.users || [];
+
+      if (users.length === 0) {
+        listEl.innerHTML =
+          '<p class="text-gray-400 text-xs">아직 아무도 없습니다.</p>';
+        return;
+      }
+
+      listEl.innerHTML = "";
+
+      users.forEach((u) => {
+        const div = document.createElement("div");
+        div.className = "flex items-center gap-3";
+
+        const profileImg = u.profile_img
+          ? `<img src="${u.profile_img}" class="w-8 h-8 rounded-full object-cover border" />`
+          : `<div class="w-8 h-8 rounded-full bg-[#FFE8CC] flex items-center justify-center text-lg">🍞</div>`;
+
+        div.innerHTML = `
+          ${profileImg}
+          <div class="flex-1">
+            <a
+              href="/users/profile/${encodeURIComponent(u.nickname)}/"
+              class="font-semibold text-[#D2691E] hover:underline text-sm"
+            >
+              ${u.nickname}
+            </a>
+            <p class="text-[11px] text-gray-500">@${u.username}</p>
+          </div>
+        `;
+
+        listEl.appendChild(div);
+      });
+    } catch (e) {
+      console.error("팔로우 목록 로딩 에러:", e);
+      listEl.innerHTML =
+        '<p class="text-red-500 text-xs">목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+</script>
+{% endblock extra_script %}

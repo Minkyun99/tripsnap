@@ -1,6 +1,8 @@
 # Created by https://www.toptal.com/developers/gitignore/api/django,venv,python
 # Edit at https://www.toptal.com/developers/gitignore?templates=django,venv,python
 
+dessert_reviews/
+
 ### Django ###
 *.log
 *.pot
@@ -277,4 +279,5 @@ pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/django,venv,python
 
-frontend
+sql.sql
+
