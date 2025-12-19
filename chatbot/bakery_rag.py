@@ -17,7 +17,7 @@ COLLECTION_NAME = "bakery_collection"
 EMBEDDING_MODEL = "jhgan/ko-sroberta-multitask"  # 한국어 임베딩 모델
 
 # OpenAI API 설정 (필요시)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your-api-key-here")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "up_eF6eMmmYAQTpSHqAaRNSJ5wJ9Sm1B")
 
 # 검색 설정
 TOP_K_RESULTS = 5  # 상위 K개 결과 반환
