@@ -4,13 +4,14 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 
+import './assets/profile.scss'
 import './assets/style.scss'
 
-const API_BASE = import.meta.env.VITE_API_KEY
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 async function initCsrf() {
   try {
-    await fetch(`${API_BASE}/api/csrf`, {
+    await fetch(`${API_BASE}/users/api/csrf/`, {
       method: 'GET',
       credentials: 'include',
     })

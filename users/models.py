@@ -12,6 +12,7 @@ class User(AbstractUser):
     - id (PK), password, date_joined (created_at) 필드가 기본 포함됩니다.
     - email 필드는 unique=True로 설정하여 소셜 로그인에서 핵심 식별자로 사용합니다.
     """
+    
 
     # 소셜 로그인의 경우 username이 없을 수 있으므로 null=True, blank=True 허용
     username = models.CharField(
@@ -39,7 +40,8 @@ class User(AbstractUser):
         blank=True,
     )
 
-    REQUIRED_FIELDS = ["email"]
+    USERNAME_FIELD = 'email'  # ✅ 이메일로 로그인
+    REQUIRED_FIELDS = []  # ✅ email이 USERNAME_FIELD이므로 비워둠
 
     class Meta:
         verbose_name = _("사용자")

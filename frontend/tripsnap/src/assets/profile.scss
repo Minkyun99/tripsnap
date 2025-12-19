@@ -1,0 +1,732 @@
+@use 'sass:color';
+
+$ts-border-brown: #d2691e;
+$ts-text-brown: #8b4513;
+$ts-cream: #fff5e6;
+$ts-cream-2: #ffe8cc;
+
+$ts-pink: #ff69b4;
+$ts-pink-hover: #ff1493;
+
+.pixel-corners {
+  border-radius: 1.25rem;
+}
+
+/* Page */
+.ts-profile-page {
+  padding: 1.5rem;
+}
+
+.ts-shell {
+  max-width: 64rem;
+  margin: 0 auto;
+}
+
+.ts-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 4px solid $ts-border-brown;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+
+.ts-stack {
+  display: grid;
+  gap: 1.25rem;
+}
+
+/* Header */
+.ts-profile-header {
+  position: relative;
+  padding: 2rem;
+  border-bottom: 4px solid $ts-border-brown;
+  background: linear-gradient(90deg, $ts-pink 0%, #ffb6c1 100%);
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .ts-profile-header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+}
+
+.ts-settings-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: $ts-border-brown;
+  border: none;
+  border-radius: 999px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+/* Avatar (잘림 해결: core만 overflow hidden, edit는 wrap 밖) */
+.ts-avatar-wrap {
+  position: relative;
+  width: 128px;
+  height: 128px;
+}
+
+.ts-avatar-core {
+  width: 128px;
+  height: 128px;
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  border: 4px solid #fff;
+  background: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.ts-avatar-core img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ts-avatar-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 3.2rem;
+  line-height: 1;
+}
+
+.ts-avatar-edit {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: $ts-pink;
+  color: #fff;
+  border: 2px solid #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+/* Info */
+.ts-profile-info {
+  color: #fff;
+}
+
+.ts-profile-name {
+  margin: 0;
+  font-size: 2.25rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.ts-profile-username {
+  margin: 0.35rem 0 0.9rem;
+  font-size: 1.05rem;
+  opacity: 0.85;
+}
+
+.ts-counts {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+@media (max-width: 768px) {
+  .ts-counts {
+    justify-content: center;
+  }
+}
+
+.ts-count-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  text-align: center;
+}
+
+.ts-count-num {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 900;
+  text-decoration: underline;
+}
+
+.ts-count-label {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.ts-owner-actions-inline {
+  margin-top: 1rem;
+}
+
+/* Follow button */
+.ts-follow-btn {
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 1.05rem;
+  font-weight: 900;
+  border-radius: 0.9rem;
+  border: 3px solid $ts-border-brown;
+  cursor: pointer;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.12);
+}
+
+.ts-follow-btn--on {
+  background: #fff;
+  color: $ts-border-brown;
+}
+
+.ts-follow-btn--off {
+  background: $ts-pink;
+  color: #fff;
+
+  &:hover {
+    background: $ts-pink-hover;
+  }
+}
+
+/* Search */
+.ts-search-wrap {
+  padding: 1.25rem 2rem 0;
+}
+
+.ts-search-bar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  background: $ts-cream;
+  padding: 0.85rem 1rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(210, 105, 30, 0.4);
+}
+
+.ts-search-label {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: $ts-text-brown;
+  white-space: nowrap;
+}
+
+.ts-input {
+  flex: 1;
+  min-width: 220px;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  font-size: 0.95rem;
+  background: #fff;
+
+  &:focus {
+    outline: none;
+    border-color: $ts-pink;
+    box-shadow: 0 0 0 3px rgba(255, 105, 180, 0.18);
+  }
+}
+
+.ts-input--sm {
+  padding: 0.45rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.ts-btn {
+  padding: 0.65rem 1rem;
+  border-radius: 0.7rem;
+  font-weight: 900;
+  border: 2px solid $ts-border-brown;
+  cursor: pointer;
+}
+
+.ts-btn--pink {
+  background: $ts-pink;
+  color: #fff;
+
+  &:hover {
+    background: $ts-pink-hover;
+  }
+}
+
+.ts-btn--white {
+  background: #fff;
+  color: $ts-text-brown;
+}
+
+.ts-btn--green {
+  background: #22c55e;
+  color: #fff;
+  border-color: #15803d;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+/* Posts */
+.ts-posts {
+  padding: 2rem;
+}
+
+.ts-grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .ts-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .ts-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 카드: 이미지가 배경으로 깔리지 않도록 "위/아래" 분리 */
+.ts-post-card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 0.95rem;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.ts-post-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* 이미지 영역 고정 높이 */
+.ts-post-thumb {
+  width: 100%;
+  height: 180px;
+  background: $ts-cream-2;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.ts-post-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ts-post-thumb--placeholder {
+  font-size: 2.4rem;
+}
+
+/* 텍스트 영역 */
+.ts-post-body {
+  padding: 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.ts-post-title {
+  margin: 0;
+  font-weight: 900;
+  color: $ts-border-brown;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ts-post-content {
+  margin: 0;
+  font-size: 0.9rem;
+  color: $ts-text-brown;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.6em;
+}
+
+.ts-like-btn {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid $ts-pink;
+  background: #fff;
+  color: $ts-pink;
+  cursor: pointer;
+}
+
+.ts-like-btn--on {
+  background: $ts-pink;
+  border-color: $ts-pink;
+  color: #fff;
+}
+
+/* Overlay + Modals */
+.ts-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 1rem;
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+
+.ts-modal {
+  width: 100%;
+  max-width: 56rem;
+  background: #fff;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.22);
+}
+
+.ts-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.ts-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .ts-modal-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.ts-modal-media {
+  background: #000;
+  display: grid;
+  place-items: center;
+  min-height: 320px;
+}
+
+.ts-modal-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.ts-placeholder {
+  font-size: 3.2rem;
+  color: #fff;
+  user-select: none;
+}
+
+.ts-modal-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ts-modal-title {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: $ts-border-brown;
+}
+
+.ts-modal-writer {
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.ts-modal-content {
+  margin: 0.75rem 0 0;
+  color: #6b4f2a;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.ts-modal-like {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+  border: 2px solid $ts-pink;
+  background: #fff;
+  color: $ts-pink;
+  cursor: pointer;
+}
+
+.ts-modal-like--on {
+  background: $ts-pink;
+  color: #fff;
+}
+
+/* Comments */
+.ts-comments-title {
+  font-weight: 900;
+  color: $ts-border-brown;
+  margin: 0;
+}
+
+.ts-comments-box {
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0.9rem;
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.ts-comment-item {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.ts-comment-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.ts-comment-writer {
+  font-weight: 900;
+  color: $ts-border-brown;
+}
+
+.ts-comment-body {
+  flex: 1;
+}
+
+.ts-comment-text {
+  color: #6b4f2a;
+  word-break: break-word;
+}
+
+.ts-comment-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  padding-left: 0.1rem;
+}
+
+.ts-comment-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+
+  button {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.ts-comment-compose {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.ts-right {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Owner actions */
+.ts-owner-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.ts-danger-link {
+  border: none;
+  background: transparent;
+  color: #dc2626;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+/* Create / Image modal base */
+.ts-image-modal {
+  width: 100%;
+  max-width: 28rem;
+  background: #fff;
+  border-radius: 1.25rem;
+  border: 4px solid $ts-border-brown;
+  padding: 1.75rem;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.22);
+}
+
+.ts-image-title {
+  margin: 0 0 1rem;
+  font-size: 1.45rem;
+  font-weight: 900;
+  text-align: center;
+  color: $ts-border-brown;
+}
+
+.ts-image-preview {
+  width: 192px;
+  height: 192px;
+  margin: 0 auto;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 4px solid $ts-border-brown;
+  background: $ts-cream-2;
+  display: grid;
+  place-items: center;
+}
+
+.ts-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ts-image-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.ts-compose-box {
+  background: $ts-cream;
+  border: 2px dashed $ts-border-brown;
+  border-radius: 0.95rem;
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ts-textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  font-size: 0.95rem;
+  background: #fff;
+
+  &:focus {
+    outline: none;
+    border-color: $ts-pink;
+    box-shadow: 0 0 0 3px rgba(255, 105, 180, 0.18);
+  }
+}
+
+.ts-mini-modal {
+  width: 100%;
+  max-width: 22rem;
+  background: #fff;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  position: relative;
+}
+
+.ts-mini-title {
+  margin: 0 0 0.9rem;
+  color: $ts-border-brown;
+  font-weight: 900;
+  font-size: 1.2rem;
+}
+
+.ts-mini-list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ts-mini-item {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.ts-mini-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: $ts-cream-2;
+  display: grid;
+  place-items: center;
+}
+
+.ts-mini-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ts-mini-name {
+  font-weight: 900;
+  color: $ts-border-brown;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.ts-mini-sub {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.1rem;
+}
+
+.ts-muted {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  margin: 0;
+}

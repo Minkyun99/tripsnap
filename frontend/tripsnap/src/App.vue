@@ -1,8 +1,10 @@
-<!-- src/App.vue -->
 <script setup>
-import Layout from './components/Layout.vue'
+import Banner from './components/Banner.vue'
 </script>
 
 <template>
-  <Layout />
+  <div>
+    <Banner />
+    <router-view />
+  </div>
 </template>

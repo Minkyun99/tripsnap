@@ -1,13 +1,15 @@
 // src/stores/users.js
 import { defineStore } from 'pinia'
+import { getCsrfToken } from '@/utils/csrf'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 export const useUserStore = defineStore('user', {
   state: () => ({
-    user: null, // { email, username, nickname, ... }
+    user: null,
     isLoading: false,
     error: null,
+    fieldErrors: {}, // ✅ 필드별 에러를 담아두면 화면에서 표시 가능
   }),
 
   getters: {
@@ -18,122 +20,152 @@ export const useUserStore = defineStore('user', {
   },
 
   actions: {
-    // 공통 에러 파싱 헬퍼
-    async _handleErrorResponse(res, defaultMessage) {
-      let message = defaultMessage
-      try {
-        const data = await res.json()
-        const firstField = Object.keys(data)[0]
-        const firstMsg = (Array.isArray(data[firstField]) && data[firstField][0]) || data.detail
-        if (firstMsg) message = firstMsg
-      } catch {
-        // ignore json parse error
-      }
-      throw new Error(message)
+    _resetErrors() {
+      this.error = null
+      this.fieldErrors = {}
     },
 
-    // 회원가입: 이메일 + 비밀번호만 사용
+    async _parseError(res, defaultMessage) {
+      // dj-rest-auth/DRF는 보통 {field:[msg]} 또는 {detail:""} 형태
+      let data = null
+      try {
+        data = await res.json()
+      } catch {
+        // ignore
+      }
+
+      if (data && typeof data === 'object') {
+        // detail 우선
+        if (data.detail) {
+          this.error = data.detail
+          throw new Error(this.error)
+        }
+
+        // field errors
+        const fieldErrors = {}
+        for (const [k, v] of Object.entries(data)) {
+          if (Array.isArray(v) && v.length) fieldErrors[k] = v[0]
+          else if (typeof v === 'string') fieldErrors[k] = v
+        }
+        this.fieldErrors = fieldErrors
+
+        // 대표 메시지 구성
+        const firstKey = Object.keys(fieldErrors)[0]
+        const firstMsg = firstKey ? fieldErrors[firstKey] : defaultMessage
+        this.error = firstMsg || defaultMessage
+        throw new Error(this.error)
+      }
+
+      this.error = defaultMessage
+      throw new Error(defaultMessage)
+    },
+
+    // ✅ 회원가입: email + password1 + password2 만 전송 (A안)
     async register({ email, password1, password2 }) {
       this.isLoading = true
-      this.error = null
+      this._resetErrors()
 
       try {
         const res = await fetch(`${API_BASE}/api/auth/registration/`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+          },
           credentials: 'include',
           body: JSON.stringify({ email, password1, password2 }),
         })
 
         if (!res.ok) {
-          await this._handleErrorResponse(res, '회원가입에 실패했습니다.')
+          await this._parseError(res, '회원가입에 실패했습니다.')
         }
 
-        // 가입 후 자동 로그인 세션이 잡힌다고 가정
+        // 가입 성공 -> 서버가 세션/JWT 쿠키 세팅했다고 가정 -> user 로드
         await this.fetchMe()
-      } catch (err) {
-        this.user = null
-        this.error = err.message ?? '회원가입 중 오류가 발생했습니다.'
-        throw err
+        if (!this.user) {
+          // 성공했는데도 user가 null이면 로그인 상태가 아닌 것
+          throw new Error('회원가입은 완료되었지만 로그인 상태를 확인할 수 없습니다.')
+        }
+
+        return true
       } finally {
         this.isLoading = false
       }
     },
 
-    // 로그인: 이메일 + 비밀번호
+    // 로그인: email + password
     async login({ email, password }) {
       this.isLoading = true
-      this.error = null
+      this._resetErrors()
 
       try {
         const res = await fetch(`${API_BASE}/api/auth/login/`, {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+          },
           body: JSON.stringify({ email, password }),
         })
 
         if (!res.ok) {
-          const data = await res.json().catch(() => null)
-          this.error = data?.detail || '로그인에 실패했습니다.'
-          return false
+          await this._parseError(res, '로그인에 실패했습니다.')
         }
 
-        // 로그인 성공 → user 정보 자동 로드
         await this.fetchMe()
-        return true
-      } catch (err) {
-        this.error = '서버와 연결할 수 없습니다.'
-        return false
+        return !!this.user
       } finally {
         this.isLoading = false
       }
     },
 
-    // 현재 로그인 유저 정보 가져오기
     async fetchMe() {
-      this.isLoading = true
-      this.error = null
-
+      // 로그인 여부 확인은 초기 부팅 시 자주 호출되므로 에러로 다루지 않음
       try {
         const res = await fetch(`${API_BASE}/api/auth/user/`, {
           credentials: 'include',
         })
 
-        // 🔵 로그인 안 된 상태 (401/403)는 에러로 보지 않고 user만 비움
         if (res.status === 401 || res.status === 403) {
           this.user = null
           return
         }
 
-        // 그 외 에러 (500 등)는 에러로 처리
         if (!res.ok) {
-          let message = '유저 정보를 가져오는 중 오류가 발생했습니다.'
-          try {
-            const data = await res.json()
-            if (data.detail) message = data.detail
-          } catch {
-            // ignore
-          }
-          throw new Error(message)
+          this.user = null
+          return
         }
 
-        // ✅ 정상 응답 (200)
-        const data = await res.json()
-        this.user = data
-      } catch (err) {
-        // 서버 진짜 에러만 여기로 들어옴
+        this.user = await res.json()
+      } catch {
         this.user = null
-        this.error = err.message ?? '유저 정보를 가져오는 중 오류가 발생했습니다.'
-      } finally {
-        this.isLoading = false
       }
     },
 
-    // 카카오 로그인/회원가입 시작
     startKakaoLogin() {
       const next = encodeURIComponent('/auth/kakao/complete')
       window.location.href = `${API_BASE}/accounts/kakao/login/?next=${next}`
+    },
+
+    async logout() {
+      this.isLoading = true
+      this._resetErrors()
+
+      try {
+        await fetch(`${API_BASE}/api/auth/logout/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+          },
+          credentials: 'include',
+          body: JSON.stringify({}),
+        })
+      } finally {
+        this.user = null
+        this.isLoading = false
+      }
     },
   },
 })

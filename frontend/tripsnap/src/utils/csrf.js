@@ -1,11 +1,11 @@
-export function getCsrfToken() {
-  const name = 'csrftoken='
-  const cookies = document.cookie.split(';')
-  for (let c of cookies) {
-    c = c.trim()
-    if (c.startsWith(name)) {
-      return decodeURIComponent(c.substring(name.length))
-    }
-  }
+// src/utils/csrf.js
+export function getCookie(name) {
+  const value = `; ${document.cookie}`
+  const parts = value.split(`; ${name}=`)
+  if (parts.length === 2) return parts.pop().split(';').shift()
   return null
+}
+
+export function getCsrfToken() {
+  return getCookie('csrftoken') || ''
 }

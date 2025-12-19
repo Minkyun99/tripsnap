@@ -5,6 +5,9 @@ app_name = 'users'
 
 urlpatterns = [
 
+    # CSRF 쿠키 세팅 (Vue SPA에서 최초 1회 호출)
+    path('api/csrf/', views.csrf_cookie, name='csrf_cookie'),
+
     # ✅ 설정 페이지
     path('settings/', views.settings_view, name='settings'),
     
@@ -27,6 +30,10 @@ urlpatterns = [
         views.followings_list_ajax,
         name="followings_list_ajax",
     ),
+
+    # Vue용 프로필 데이터 API (추가)
+    path('api/profile/me/', views.profile_me_api, name='profile_me_api'),
+    path('api/profile/<str:nickname>/', views.profile_detail_api, name='profile_detail_api'),
 
     # ===== 회원가입 / 탈퇴 / 프로필 이미지 =====
     path('signup/', views.signup, name='signup'),
