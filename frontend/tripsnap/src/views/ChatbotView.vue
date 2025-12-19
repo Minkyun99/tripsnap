@@ -35,28 +35,41 @@ onMounted(() => {
 })
 
 const sendMessage = async () => {
+  console.log('=== sendMessage 시작 ===')
   errorMessage.value = ''
 
   const content = userInput.value.trim()
-  if (!content || !conversationId.value) return
+  console.log('1. 입력 내용:', content)
+  console.log('2. conversationId:', conversationId.value)
+  
+  if (!content || !conversationId.value) {
+    console.log('❌ 입력 내용 또는 conversationId 없음')
+    return
+  }
 
+  console.log('3. isAuthenticated:', isAuthenticated.value)
   if (!isAuthenticated.value) {
     errorMessage.value = '챗봇을 사용하려면 먼저 로그인 해주세요.'
     return
   }
 
   const csrftoken = getCsrfToken()
+  console.log('4. CSRF 토큰:', csrftoken ? '있음' : '없음')
+  
   if (!csrftoken) {
     errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
     return
   }
 
   // 사용자 메시지 먼저 화면에 추가
+  console.log('5. 사용자 메시지 추가 시도')
   chatStore.appendMessage('user', content)
   userInput.value = ''
   isLoading.value = true
+  console.log('6. 로딩 시작')
 
   try {
+    console.log('7. API 요청 시작:', `${API_BASE}/chatbot/chat/`)
     const res = await fetch(`${API_BASE}/chatbot/chat/`, {
       method: 'POST',
       headers: {
@@ -71,6 +84,8 @@ const sendMessage = async () => {
       }),
     })
 
+    console.log('8. 응답 상태:', res.status)
+    
     if (!res.ok) {
       let detail = '챗봇 서버와 통신 중 오류가 발생했습니다.'
       try {
@@ -83,42 +98,27 @@ const sendMessage = async () => {
     }
 
     const data = await res.json()
+    console.log('9. 응답 데이터:', data)
 
     const reply = data.llm_response || '응답을 받았지만 표시할 내용이 없습니다.'
+    console.log('10. LLM 응답 추가')
     chatStore.appendMessage('bot', reply)
 
+    // 추천 빵집 목록을 별도로 저장
     if (Array.isArray(data.results) && data.results.length > 0) {
-      const lines = ['\n📍 추천 빵집 목록:']
-      data.results.forEach((r, idx) => {
-        const name = r.place_name || '이름 미상'
-        const district = r.district || ''
-        const address = r.address || ''
-        const rating = r.rating || ''
-        
-        // 첫 줄: 이름과 평점
-        let line = `${idx + 1}. ${name}`
-        if (rating) {
-          line += ` ⭐ ${rating}`
-        }
-        
-        // 두 번째 줄: 위치와 주소
-        const locationInfo = []
-        if (district) {
-          locationInfo.push(`대전 ${district}`)
-        }
-        if (address) {
-          locationInfo.push(address)
-        }
-        if (locationInfo.length > 0) {
-          line += `\n   📍 ${locationInfo.join(' | ')}`
-        }
-        
-        lines.push(line)
-      })
-      chatStore.appendMessage('bot', lines.join('\n'))
+      console.log('11. 빵집 목록 추가:', data.results.length, '개')
+      // results를 별도 메시지로 추가 (텍스트는 placeholder)
+      const msg = {
+        id: Date.now(),
+        role: 'bot',
+        text: '__BAKERY_LIST__',  // 특수 플래그
+        results: data.results
+      }
+      chatStore.messages.push(msg)
+      console.log('12. chatStore.messages:', chatStore.messages)
     }
   } catch (err) {
-    console.error(err)
+    console.error('❌ 에러 발생:', err)
     errorMessage.value = err.message || '챗봇 서버와 통신 중 알 수 없는 오류가 발생했습니다.'
     chatStore.appendMessage(
       'bot',
@@ -126,6 +126,7 @@ const sendMessage = async () => {
     )
   } finally {
     isLoading.value = false
+    console.log('=== sendMessage 종료 ===')
   }
 }
 
@@ -136,6 +137,11 @@ const handleKeydown = (e) => {
       sendMessage()
     }
   }
+}
+
+const handleBakeryClick = (bakery) => {
+  // TODO: 빵집 클릭 시 동작 구현
+  console.log('클릭된 빵집:', bakery)
 }
 </script>
 
@@ -155,7 +161,32 @@ const handleKeydown = (e) => {
       >
         <div class="bubble">
           <span v-if="m.role === 'user'">👤 {{ m.text }}</span>
-          <span v-else>🤖 {{ m.text }}</span>
+          <span v-else-if="m.text !== '__BAKERY_LIST__' && !m.results">🤖 {{ m.text }}</span>
+          
+          <!-- 빵집 목록이 있는 경우 버튼으로 표시 -->
+          <div v-else-if="m.results" class="bakery-list">
+            <div class="bakery-list-header">📍 추천 빵집 목록</div>
+            <button
+              v-for="(bakery, idx) in m.results"
+              :key="idx"
+              class="bakery-button"
+              @click="handleBakeryClick(bakery)"
+            >
+              <div class="bakery-number">{{ idx + 1 }}</div>
+              <div class="bakery-info">
+                <div class="bakery-name">
+                  {{ bakery.place_name || '이름 미상' }}
+                  <span v-if="bakery.rating" class="bakery-rating">⭐ {{ bakery.rating }}</span>
+                </div>
+                <div v-if="bakery.district || bakery.address" class="bakery-location">
+                  📍 
+                  <span v-if="bakery.district">대전 {{ bakery.district }}</span>
+                  <span v-if="bakery.district && bakery.address"> | </span>
+                  <span v-if="bakery.address" class="bakery-address">{{ bakery.address }}</span>
+                </div>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
       <div v-if="isLoading" class="ts-chat-loading">🤖 생각 중...</div>
@@ -275,6 +306,90 @@ $ts-bg-cream: #fffaf0;
   padding: 0.5rem 0.7rem;
   font-size: 0.9rem;
   color: $ts-text-brown;
+}
+
+/* 빵집 목록 스타일 */
+.bakery-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bakery-list-header {
+  font-size: 1rem;
+  font-weight: 700;
+  color: $ts-text-brown;
+  margin-bottom: 0.5rem;
+}
+
+.bakery-button {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem;
+  background: #fffaf0;
+  border: 2px solid rgba(210, 105, 30, 0.3);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  font-family: inherit;
+}
+
+.bakery-button:hover {
+  background: #fff5e6;
+  border-color: $ts-border-brown;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.bakery-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  background: $ts-border-brown;
+  color: white;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.bakery-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.bakery-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: $ts-text-brown;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bakery-rating {
+  font-size: 0.85rem;
+  color: #ff8c00;
+  font-weight: 600;
+}
+
+.bakery-location {
+  font-size: 0.8rem;
+  color: #666;
+  line-height: 1.4;
+}
+
+.bakery-address {
+  color: #888;
 }
 
 /* 푸터 영역 (입력창 + 버튼) */
