@@ -1,6 +1,9 @@
 // src/stores/profile.js
 import { defineStore } from 'pinia'
 import { apiFetch, apiJson } from '@/utils/api'
+import { getCsrfToken } from '@/utils/csrf'
+
+const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 export const useProfileStore = defineStore('profile', {
   state: () => ({
@@ -31,6 +34,8 @@ export const useProfileStore = defineStore('profile', {
     followModalOpen: false,
     followModalType: 'followers',
     followList: [],
+    // ✅ (수정) 403 같은 경우 “비공개 입니다.”를 표시하기 위한 메시지
+    followListPrivateMessage: '',
   }),
 
   getters: {
@@ -82,14 +87,21 @@ export const useProfileStore = defineStore('profile', {
       const q = (query || '').trim()
       if (!q) throw new Error('검색어를 입력해주세요.')
 
-      // views.profile_search: AJAX면 JSON 반환
-      const res = await apiFetch(`/users/profile/search/?q=${encodeURIComponent(q)}`, {
+      // ✅ (수정) urls.py 기준: /users/api/profile/search/?q=...
+      const res = await apiFetch(`/users/api/profile/search/?q=${encodeURIComponent(q)}`, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
       })
       const data = await res.json().catch(() => null)
 
-      if (!res.ok) throw new Error(data?.error || '검색 중 오류가 발생했습니다.')
-      if (!data?.found) throw new Error(data?.error || '사용자를 찾을 수 없습니다.')
+      if (!res.ok) {
+        throw new Error(data?.detail || data?.error || '검색 중 오류가 발생했습니다.')
+      }
+
+      // 서버 응답이 {"nickname": "..."} 형태라고 가정
+      if (!data?.nickname) {
+        throw new Error(data?.detail || '사용자를 찾을 수 없습니다.')
+      }
+
       return data.nickname
     },
 
@@ -200,33 +212,62 @@ export const useProfileStore = defineStore('profile', {
     },
 
     async deletePost(postId) {
-      // Django post_delete는 POST로 처리
-      const res = await apiFetch(`/users/post/${postId}/delete/`, {
+      const res = await fetch(`${API_BASE}/users/post/${postId}/delete/`, {
         method: 'POST',
-        body: new URLSearchParams({}),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'include',
+        redirect: 'manual',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({}),
       })
-      if (!res.ok) throw new Error('게시글 삭제에 실패했습니다.')
 
-      // 프론트에서도 제거
-      this.posts = this.posts.filter((x) => x.id !== postId)
-      if (this.activePost?.id === postId) this.closePostModal()
+      if (!res.ok) {
+        throw new Error('게시글 삭제에 실패했습니다.')
+      }
+
+      const data = await res.json()
+
+      // ✅ 즉시 프론트 상태 반영
+      this.posts = this.posts.filter((p) => p.id !== postId)
+      this.closePostModal()
+
+      return data
     },
 
-    async createPost({ title, content, file }) {
-      const fd = new FormData()
-      fd.append('title', title || '')
-      fd.append('content', content || '')
-      if (file) fd.append('share_trip', file)
-
-      const res = await apiFetch('/users/post/create/', {
+    async createPost({ title, content, image_base64 }) {
+      const res = await fetch(`${API_BASE}/users/post/create/`, {
         method: 'POST',
-        body: fd,
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+          title,
+          content,
+          image_base64, // ✅ base64
+        }),
       })
-      if (!res.ok) throw new Error('게시글 작성에 실패했습니다.')
 
-      // 작성 후 프로필 reload
-      await this.loadMyProfile()
+      if (!res.ok) {
+        let msg = '게시글 작성 실패'
+        try {
+          const data = await res.json()
+          msg = data?.error || msg
+        } catch {}
+        throw new Error(msg)
+      }
+
+      const data = await res.json()
+
+      // 즉시 반영
+      this.posts.unshift(data.post)
+
+      return data
     },
 
     async uploadProfileImageBase64(base64Image) {
@@ -241,24 +282,56 @@ export const useProfileStore = defineStore('profile', {
       return data.image_url
     },
 
-    async openFollowModal(type) {
+    // ✅ (수정) 403을 “에러 throw”로 만들지 않고, UI 메시지로 처리
+    async openFollowModal(type, targetNickname = null) {
+      const nick = targetNickname || this.profile?.nickname
+      if (!nick) return
+
       this.followModalType = type
       this.followModalOpen = true
       this.followList = []
+      this.followListPrivateMessage = ''
 
-      const nickname = this.profile.nickname
       const url =
         type === 'followers'
-          ? `/users/profile/${encodeURIComponent(nickname)}/followers/ajax/`
-          : `/users/profile/${encodeURIComponent(nickname)}/followings/ajax/`
+          ? `/users/profile/${encodeURIComponent(nick)}/followers/ajax/`
+          : `/users/profile/${encodeURIComponent(nick)}/followings/ajax/`
 
-      const data = await apiJson(url)
+      const res = await apiFetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      })
+
+      // 403이면 콘솔 에러 없이 “비공개” 처리
+      if (res.status === 403) {
+        const data = await res.json().catch(() => null)
+        this.followList = []
+        this.followListPrivateMessage = data?.detail || '비공개 입니다.'
+        return
+      }
+
+      // 기타 에러도 메시지로만 처리(콘솔 에러/throw 최소화)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        this.followList = []
+        this.followListPrivateMessage = data?.detail || '팔로우 목록을 불러오지 못했습니다.'
+        return
+      }
+
+      const data = await res.json().catch(() => ({}))
+      // 백엔드가 200 + {private:true, detail:"비공개 입니다."} 형태로 바뀌어도 대응
+      if (data?.private) {
+        this.followList = []
+        this.followListPrivateMessage = data?.detail || '비공개 입니다.'
+        return
+      }
+
       this.followList = data.users || []
     },
 
     closeFollowModal() {
       this.followModalOpen = false
       this.followList = []
+      this.followListPrivateMessage = ''
     },
 
     openImageModal() {

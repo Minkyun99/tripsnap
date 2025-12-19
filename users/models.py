@@ -40,6 +40,18 @@ class User(AbstractUser):
         blank=True,
     )
 
+    class FollowVisibility(models.TextChoices):
+        PUBLIC = "public", _("전체 공개")
+        FOLLOWERS = "followers", _("내 팔로워에게만 공개")
+        PRIVATE = "private", _("비공개")
+
+    follow_visibility = models.CharField(
+        _("팔로우 목록 공개 범위"),
+        max_length=20,
+        choices=FollowVisibility.choices,
+        default=FollowVisibility.PUBLIC,
+    )
+
     USERNAME_FIELD = 'email'  # ✅ 이메일로 로그인
     REQUIRED_FIELDS = []  # ✅ email이 USERNAME_FIELD이므로 비워둠
 
