@@ -730,3 +730,102 @@ $ts-pink-hover: #ff1493;
   font-size: 0.85rem;
   margin: 0;
 }
+
+$ts-brown: #d2691e;
+$ts-pink: #ff69b4;
+
+.ts-post-detail-card {
+  width: 90%;
+  max-width: 480px;
+  background: white;
+  border: 4px solid $ts-brown;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 슬라이더 스타일 */
+.ts-slider-section {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #fafafa;
+  overflow: hidden;
+  border-bottom: 2px solid #eee;
+}
+
+.ts-slider-track {
+  display: flex;
+  height: 100%;
+  transition: transform 0.4s ease-out;
+}
+
+.ts-slide-item {
+  min-width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  img { width: 100%; height: 100%; object-fit: cover; }
+  &.no-img { color: #ccc; font-weight: bold; }
+}
+
+/* 내비게이션 버튼 */
+.ts-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.7);
+  border: 2px solid $ts-brown;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  &.prev { left: 10px; }
+  &.next { right: 10px; }
+}
+
+.ts-page-indicator {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: $ts-brown;
+  color: white;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  border-radius: 4px;
+}
+
+/* 텍스트 영역 */
+.ts-info-section { padding: 1rem; }
+.ts-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.ts-modal-title { font-size: 1.1rem; font-weight: 800; color: #333; margin: 0; }
+.ts-close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #ddd; }
+.ts-modal-scroll { max-height: 120px; overflow-y: auto; margin-bottom: 1rem; }
+.ts-modal-text { font-size: 0.95rem; line-height: 1.5; color: #666; white-space: pre-wrap; margin: 0; }
+
+.ts-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px dashed #eee;
+  padding-top: 0.8rem;
+}
+
+.ts-like-action {
+  background: white;
+  border: 1px solid #eee;
+  padding: 4px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  &.is-liked { border-color: $ts-pink; color: $ts-pink; background: #fff0f5; }
+}
+.ts-post-date { font-size: 0.8rem; color: #999; }
+
+/* 커스텀 스크롤바 */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: $ts-brown; border-radius: 2px; }

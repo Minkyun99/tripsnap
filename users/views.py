@@ -19,7 +19,8 @@ from django.views.decorators.http import require_POST, require_http_methods
 from allauth.socialaccount.models import SocialAccount
 
 from .forms import CustomUserCreationForm
-from .models import Profile, Post, Like, Comment, Social
+from .models import Profile, Post, PostImage, Like, Comment, Social
+from .serializers import PostSerializer
 
 User = get_user_model()
 
@@ -46,13 +47,13 @@ def generate_unique_nickname() -> str:
         "쫄깃한", "바삭한", "파삭한", "부드러운", "촉촉한", "퍽퍽한",
         "거친", "묵직한", "고소한", "달콤한", "담백한", "짭짤한",
         "신맛이 나는", "시큼한", "풍부한", "향긋한", "노릇노릇한",
-        "탐스러운", "먹음직스러운", "마른", "딱딱한", "매끈한", "겉바속촉", "눅눅한"
+        "탐스러운", "먹음직스러운", "마른", "딱딱한", "매끈한", "겉바속촉", "눅눅한", "푸석푸석한", "미끌미끌한"
     ]
     nouns = [
         "밀가루", "효모", "이스트", "버터", "우유", "설탕", "소금", "계란",
         "반죽", "오븐", "베이커리", "빵집", "제빵사", "식빵", "바게트",
         "크루아상", "베이글", "모닝빵", "도넛", "케이크", "사워도우",
-        "깜빠뉴", "크러스트", "겉껍질", "속살", "빵조각", "기포", "트레이"
+        "깜빠뉴", "크러스트", "겉껍질", "속살", "빵조각", "기포", "트레이", "피자빵", "맘모스", "뚱카롱", "식빵", "김치찹쌀주먹밥", "튀소"
     ]
 
     while True:
@@ -99,9 +100,10 @@ def _profile_payload(request, target_user: User):
 
     posts_qs = (
         Post.objects.filter(writer=target_user)
-        .prefetch_related("likes")
+        .prefetch_related("likes", "images") # "images"는 PostImage의 related_name
         .order_by("-id")
     )
+
 
     liked_post_ids = []
     if request.user.is_authenticated:
@@ -121,6 +123,15 @@ def _profile_payload(request, target_user: User):
             "is_owner": (request.user == p.writer),
         })
 
+
+    serializer = PostSerializer(posts_qs, many=True, context={'request': request})
+    
+    # 3. Serializer 데이터에 is_owner 정보 추가 (기존 프론트엔드 호환용)
+    posts_data = serializer.data
+    for p_data in posts_data:
+        p_data['is_owner'] = is_owner
+        
+
     payload = {
         "profile": {
             "email": target_user.email or "",
@@ -133,7 +144,7 @@ def _profile_payload(request, target_user: User):
             "is_owner": is_owner,
             "is_following": is_following,
         },
-        "posts": posts,
+        "posts": posts_data,
     }
     return JsonResponse(payload)
 
@@ -343,6 +354,7 @@ def user_profile(request, nickname=None):
                 "is_owner": (p.writer_id == request.user.id),
             })
 
+
         return JsonResponse({
             "target_user": {
                 "email": target_user.email,
@@ -541,38 +553,52 @@ def post_create(request):
 
     title = (body.get("title") or "").strip()
     content = (body.get("content") or "").strip()
-    image_base64 = body.get("image_base64")
+    images_base64 = body.get("images") or []
 
-    image_file = None
-    if image_base64:
-        try:
-            header, encoded = image_base64.split(";base64,")
+    if not title or not content:
+        return JsonResponse({"error": "제목과 내용을 모두 입력해주세요."}, status=400)
+
+    try:
+        # 1. 게시물 본문 생성
+        post = Post.objects.create(
+            writer=request.user,
+            title=title,
+            content=content,
+        )
+
+        # 2. 이미지 배열 처리
+        for idx, base64_str in enumerate(images_base64):
+            if not base64_str or ";base64," not in base64_str:
+                continue
+
+            header, encoded = base64_str.split(";base64,")
             ext = header.split("/")[-1]
+            
             image_file = ContentFile(
                 base64.b64decode(encoded),
-                name=f'post_{uuid.uuid4()}.{ext}'
+                name=f'post_{post.id}_{idx}_{uuid.uuid4()}.{ext}'
             )
-        except Exception:
-            return JsonResponse({"error": "이미지 처리 실패"}, status=400)
 
-    post = Post.objects.create(
-        writer=request.user,
-        title=title,
-        content=content,
-        share_trip=image_file,
-    )
+            # 첫 번째 사진을 대표 이미지(share_trip)로 저장
+            if idx == 0:
+                post.share_trip = image_file
+                post.save()
 
-    return JsonResponse({
-        "post": {
-            "id": post.id,
-            "title": post.title,
-            "content": post.content,
-            "image": abs_url(request, post.share_trip.url) if post.share_trip else None,
-            "like_count": 0,
-            "is_liked": False,
-        }
-    })
+            # 모든 사진을 PostImage 모델에 개별 레코드로 저장
+            PostImage.objects.create(
+                post=post,
+                image=image_file
+            )
 
+        serializer = PostSerializer(post, context={'request': request})
+        
+        return JsonResponse({
+            "message": "게시글이 성공적으로 작성되었습니다.",
+            "post": serializer.data
+        })
+
+    except Exception as e:
+        return JsonResponse({"error": f"서버 오류: {str(e)}"}, status=500)
 
 @login_required
 @require_POST
