@@ -88,11 +88,32 @@ const sendMessage = async () => {
     chatStore.appendMessage('bot', reply)
 
     if (Array.isArray(data.results) && data.results.length > 0) {
-      const lines = ['\n추천 빵집 목록:']
+      const lines = ['\n📍 추천 빵집 목록:']
       data.results.forEach((r, idx) => {
-        const name = r.name || r.store_name || '이름 미상'
-        const district = r.district || r.address || ''
-        lines.push(`${idx + 1}. ${name} ${district && `(${district})`}`)
+        const name = r.place_name || '이름 미상'
+        const district = r.district || ''
+        const address = r.address || ''
+        const rating = r.rating || ''
+        
+        // 첫 줄: 이름과 평점
+        let line = `${idx + 1}. ${name}`
+        if (rating) {
+          line += ` ⭐ ${rating}`
+        }
+        
+        // 두 번째 줄: 위치와 주소
+        const locationInfo = []
+        if (district) {
+          locationInfo.push(`대전 ${district}`)
+        }
+        if (address) {
+          locationInfo.push(address)
+        }
+        if (locationInfo.length > 0) {
+          line += `\n   📍 ${locationInfo.join(' | ')}`
+        }
+        
+        lines.push(line)
       })
       chatStore.appendMessage('bot', lines.join('\n'))
     }
