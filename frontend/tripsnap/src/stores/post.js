@@ -5,8 +5,8 @@ const API_BASE = 'http://localhost:8000'
 
 export const usePostStore = defineStore('post', {
   state: () => ({
-    posts: [],            // 목록
-    currentPost: null,    // 상세
+    posts: [], // 목록
+    currentPost: null, // 상세
     isLoading: false,
     error: null,
   }),
@@ -18,13 +18,12 @@ export const usePostStore = defineStore('post', {
       this.isLoading = true
       this.error = null
       try {
-        // TODO: Django에 /users/posts/api/ 같은 JSON 뷰를 하나 만들면 좋습니다.
         const res = await fetch(`${API_BASE}/users/posts/api/`, {
           credentials: 'include',
         })
         if (!res.ok) throw new Error('게시글 목록 조회 실패')
         const data = await res.json()
-        this.posts = data.posts ?? data  // 백엔드 응답 형식에 맞게 조정
+        this.posts = data.posts ?? data // 백엔드 응답 형식에 맞게 조정
       } catch (err) {
         this.error = err.message ?? '오류 발생'
       } finally {

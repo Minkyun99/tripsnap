@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useProfileStore } from '@/stores/profile'
@@ -18,6 +18,11 @@ onMounted(async () => {
   await ps.loadMyProfile()
 })
 
+// ✅ (추가) 페이지를 떠날 때 follow 모달이 다른 페이지에 “남아있지 않도록” 정리
+onBeforeUnmount(() => {
+  ps.closeFollowModal()
+})
+
 function goSettings() {
   router.push({ name: 'settings' }).catch(() => {})
 }
@@ -30,6 +35,12 @@ async function onSearch() {
 function openPostModal(post) {
   ps.openPostModal(post)
 }
+
+// ✅ (수정) 템플릿에서 멀티라인 @click 제거용
+function goProfileFromFollow(nickname) {
+  ps.closeFollowModal()
+  router.push({ name: 'profile-detail', params: { nickname } }).catch(() => {})
+}
 </script>
 
 <template>
@@ -41,7 +52,6 @@ function openPostModal(post) {
             ⚙️
           </button>
 
-          <!-- avatar wrap: 잘림 해결 (edit 버튼은 바깥에 배치) -->
           <div class="ts-avatar-wrap">
             <div class="ts-avatar-core" role="button" @click="ps.openImageModal()">
               <img v-if="ps.profileImgUrl" :src="ps.profileImgUrl" alt="profile" />
@@ -82,16 +92,6 @@ function openPostModal(post) {
           </div>
         </div>
 
-        <!-- 검색바: 원하시면 Banner로 이동시키고 여기선 제거하셔도 됩니다 -->
-        <!-- <div class="ts-search-wrap">
-          <form class="ts-search-bar" @submit.prevent="onSearch">
-            <label class="ts-search-label">다른 사람 프로필 검색</label>
-            <input class="ts-input" v-model="searchQ" placeholder="닉네임 또는 이메일" />
-            <button class="ts-btn ts-btn--pink" type="submit">검색</button>
-          </form>
-        </div> -->
-
-        <!-- 게시글 그리드: 이미지/텍스트 분리 카드 -->
         <div class="ts-posts">
           <div class="ts-grid">
             <article
@@ -139,18 +139,22 @@ function openPostModal(post) {
               <img v-if="u.profile_img" :src="u.profile_img" />
               <span v-else>🍞</span>
             </div>
+
             <div style="flex: 1">
-              <div
-                class="ts-mini-name"
-                @click="router.push({ name: 'profile-detail', params: { nickname: u.nickname } })"
-              >
+              <!-- ✅ (수정) 멀티라인 @click 제거 -->
+              <div class="ts-mini-name" @click="goProfileFromFollow(u.nickname)">
                 {{ u.nickname }}
               </div>
               <div class="ts-mini-sub">@{{ u.username }}</div>
             </div>
           </div>
 
-          <p v-if="ps.followList.length === 0" class="ts-muted">아직 아무도 없습니다.</p>
+          <!-- ✅ (추가) 비공개 문구 -->
+          <p v-if="ps.followListPrivateMessage" class="ts-muted">
+            {{ ps.followListPrivateMessage }}
+          </p>
+
+          <p v-else-if="ps.followList.length === 0" class="ts-muted">아직 아무도 없습니다.</p>
         </div>
       </div>
     </div>
