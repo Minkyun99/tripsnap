@@ -5,7 +5,7 @@
 # 3. 나중에 여기다가 캐싱, 로깅 등 추가 기능 추가하기 쉬움
 # 4. 인터페이스 제공
 
-from .bakery_rag import BakeryRAGSystem
+from .bakery_rag_adapter import BakeryRAGSystem
 
 class RAGWrapper:
     _instance = None  # 싱글톤 패턴 사용

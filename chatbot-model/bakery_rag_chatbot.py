@@ -131,7 +131,7 @@ class BakeryExpertRAG:
                     base_url="https://api.upstage.ai/v1",
                 )
                 self.llm_rerank_model = "solar-mini-250422"
-                self.llm_knowledge_model = "solar-pro-2"
+                self.llm_knowledge_model = "solar-mini-250422"
                 print("🧠 Upstage LLM 클라이언트 초기화 완료 (재랭킹/지식 모드)")
             except Exception as e:
                 print(f"⚠️ Upstage LLM 클라이언트 초기화 실패: {e}")
