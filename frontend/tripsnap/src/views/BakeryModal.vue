@@ -7,11 +7,15 @@
         <!-- 왼쪽: 지도 영역 -->
         <div class="bakery-modal-left">
           <div class="bakery-map-container">
-            <!-- 지도 API는 나중에 추가 -->
-            <div class="bakery-map-placeholder">
+            <!-- 위도/경도가 있으면 카카오 지도 표시 -->
+            <div v-if="bakery?.latitude && bakery?.longitude" ref="mapContainer" class="kakao-map"></div>
+            
+            <!-- 위도/경도가 없으면 안내 메시지 -->
+            <div v-else class="bakery-map-placeholder">
               <span class="map-icon">🗺️</span>
-              <p>지도 영역</p>
+              <p class="map-unavailable">지도 정보 미제공</p>
               <p class="map-info">{{ bakery?.name }}</p>
+              <p class="map-info-sub">위치 정보가 등록되지 않은 빵집입니다</p>
             </div>
           </div>
 
@@ -173,7 +177,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 
 const props = defineProps({
   bakery: { type: Object, default: null },
@@ -188,6 +192,11 @@ const emit = defineEmits([
 ])
 
 const commentInput = ref('')
+const mapContainer = ref(null)
+let kakaoMap = null
+let kakaoMarker = null
+let mapInitRetryCount = 0  // 재시도 횟수
+const MAX_RETRY = 10  // 최대 재시도 횟수
 
 // 영업시간이 있는지 확인
 const hasBusinessHours = computed(() => {
@@ -209,11 +218,107 @@ const keywordList = computed(() => {
     .filter(k => k.length > 0)
 })
 
-// 모달이 열릴 때마다 댓글 입력 초기화
+// 카카오 지도 초기화
+const initKakaoMap = () => {
+  console.log('=== 카카오 지도 초기화 시도 ===')
+  
+  // 위도/경도가 없으면 초기화하지 않음 (플레이스홀더 표시)
+  if (!props.bakery?.latitude || !props.bakery?.longitude) {
+    console.warn('⚠️ 위도/경도 정보가 없습니다. 지도 미제공 메시지를 표시합니다.')
+    return
+  }
+
+  if (!window.kakao) {
+    mapInitRetryCount++
+    console.warn(`⏳ 카카오 SDK 로드 대기 중... (${mapInitRetryCount}/${MAX_RETRY})`)
+    
+    if (mapInitRetryCount >= MAX_RETRY) {
+      console.error('❌ 카카오 SDK 로드 실패')
+      return
+    }
+    
+    setTimeout(() => {
+      initKakaoMap()
+    }, 500)
+    return
+  }
+
+  console.log('✅ window.kakao 발견!')
+  console.log('window.kakao:', window.kakao)
+  
+  // kakao.maps가 없으면 기다림
+  if (!window.kakao.maps) {
+    console.warn('⏳ kakao.maps 로딩 중...')
+    setTimeout(() => {
+      initKakaoMap()
+    }, 100)
+    return
+  }
+
+  console.log('✅ kakao.maps 발견!')
+  mapInitRetryCount = 0
+
+  nextTick(() => {
+    if (!mapContainer.value) {
+      console.error('❌ 지도 컨테이너를 찾을 수 없습니다.')
+      return
+    }
+
+    try {
+      const lat = parseFloat(props.bakery.latitude)
+      const lng = parseFloat(props.bakery.longitude)
+
+      console.log('좌표:', { lat, lng })
+
+      // 지도 중심 좌표
+      const mapCenter = new window.kakao.maps.LatLng(lat, lng)
+
+      // 지도 옵션
+      const mapOption = {
+        center: mapCenter,
+        level: 3,
+      }
+
+      // 지도 생성
+      kakaoMap = new window.kakao.maps.Map(mapContainer.value, mapOption)
+
+      // 지도 크기 재조정 (필수!)
+      setTimeout(() => {
+        kakaoMap.relayout()
+      }, 100)
+
+      // 마커 생성
+      kakaoMarker = new window.kakao.maps.Marker({
+        position: mapCenter,
+        map: kakaoMap,
+      })
+
+      // 인포윈도우 생성
+      const infowindow = new window.kakao.maps.InfoWindow({
+        content: `<div style="padding:5px;font-size:12px;text-align:center;width:150px;">${props.bakery.name}</div>`,
+      })
+
+      // 마커에 인포윈도우 표시
+      infowindow.open(kakaoMap, kakaoMarker)
+
+      console.log('✅ 카카오 지도 초기화 완료')
+    } catch (error) {
+      console.error('❌ 카카오 지도 초기화 실패:', error)
+    }
+  })
+}
+
+// 모달이 열릴 때마다 댓글 입력 초기화 & 지도 초기화
 watch(
   () => props.bakery,
-  () => {
+  (newBakery) => {
     commentInput.value = ''
+    mapInitRetryCount = 0  // 재시도 카운터 리셋
+    
+    if (newBakery) {
+      // 지도 초기화
+      initKakaoMap()
+    }
   },
   { immediate: true }
 )
@@ -306,10 +411,17 @@ $ts-bg-cream: #fffaf0;
 .bakery-map-container {
   width: 100%;
   height: 350px;
+  min-height: 350px; /* 최소 높이 추가 */
   margin-bottom: 1.5rem;
   border-radius: 1rem;
   overflow: hidden;
   border: 2px solid rgba(210, 105, 30, 0.3);
+}
+
+.kakao-map {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 350px !important; /* 명시적 높이 */
 }
 
 .bakery-map-placeholder {
@@ -321,20 +433,32 @@ $ts-bg-cream: #fffaf0;
   align-items: center;
   justify-content: center;
   color: $ts-text-brown;
+  padding: 2rem;
 
   .map-icon {
     font-size: 4rem;
     margin-bottom: 0.5rem;
+    opacity: 0.6;
   }
 
-  p {
-    margin: 0.25rem 0;
-    font-size: 0.95rem;
+  .map-unavailable {
+    margin: 0.5rem 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: $ts-border-brown;
   }
 
   .map-info {
+    margin: 0.25rem 0;
+    font-size: 1rem;
     font-weight: 600;
     color: $ts-border-brown;
+  }
+
+  .map-info-sub {
+    margin: 0.5rem 0 0 0;
+    font-size: 0.85rem;
+    color: #999;
   }
 }
 

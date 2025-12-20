@@ -1,7 +1,7 @@
 <!-- src/views/ChatbotView.vue -->
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
 import { useChatStore } from '../stores/chatbot'
 import { getCsrfToken } from '../utils/csrf'
@@ -9,7 +9,6 @@ import BakeryModal from './BakeryModal.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE
 
-const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const chatStore = useChatStore()
@@ -455,7 +454,7 @@ $ts-bg-cream: #fffaf0;
 
 .ts-chat-message.from-user .bubble {
   background: color.adjust(#ff69b4, $lightness: 27%);
-  color: #fff;
+  color: #2d2d2d;  /* 어두운 회색으로 변경 */
   border-bottom-right-radius: 0.28rem;
   box-shadow: 0 3px 0 color.adjust(#ff69b4, $lightness: -15%);
 }
