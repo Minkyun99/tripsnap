@@ -237,38 +237,38 @@ export const useProfileStore = defineStore('profile', {
       return data
     },
 
-    async createPost({ title, content, image_base64 }) {
-      const res = await fetch(`${API_BASE}/users/post/create/`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrfToken(),
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        body: JSON.stringify({
-          title,
-          content,
-          image_base64, // ✅ base64
-        }),
-      })
-
-      if (!res.ok) {
-        let msg = '게시글 작성 실패'
-        try {
-          const data = await res.json()
-          msg = data?.error || msg
-        } catch {}
-        throw new Error(msg)
-      }
-
-      const data = await res.json()
-
-      // 즉시 반영
-      this.posts.unshift(data.post)
-
-      return data
+async createPost({ title, content, images }) { // image_base64 대신 images (배열) 받기
+  const res = await fetch(`${API_BASE}/users/post/create/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfToken(),
+      'X-Requested-With': 'XMLHttpRequest',
     },
+    body: JSON.stringify({
+      title,
+      content,
+      images, // ✅ Base64 문자열들의 배열
+    }),
+  })
+
+  if (!res.ok) {
+    let msg = '게시글 작성 실패'
+    try {
+      const data = await res.json()
+      msg = data?.error || msg
+    } catch {}
+    throw new Error(msg)
+  }
+
+  const data = await res.json()
+  // 즉시 반영 (백엔드 응답 구조에 따라 data.post 확인)
+  if (data.post) {
+    this.posts.unshift(data.post)
+  }
+  return data
+},
 
     async uploadProfileImageBase64(base64Image) {
       const data = await apiJson('/users/upload-profile-image/', {
