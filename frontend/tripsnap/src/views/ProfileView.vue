@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useProfileStore } from '@/stores/profile'
@@ -8,11 +8,29 @@ import ProfileImageModal from '@/components/profile/ProfileImageModal.vue'
 import CreatePostModal from '@/components/profile/CreatePostModal.vue'
 import PostModal from '@/components/profile/PostModal.vue'
 
+const emit = defineEmits(['close'])
+
 const router = useRouter()
 const ps = useProfileStore()
 const { posts } = storeToRefs(ps)
 
 const searchQ = ref('')
+
+// 현재 슬라이드 인덱스
+const currentIndex = ref(0)
+
+// Pinia에서 현재 선택된 게시물 정보 가져오기
+const post = computed(() => ps.currentPost)
+
+function prevSlide() {
+  if (currentIndex.value > 0) currentIndex.value--
+}
+
+function nextSlide() {
+  if (currentIndex.value < (post.value.images?.length || 0) - 1) {
+    currentIndex.value++
+  }
+}
 
 onMounted(async () => {
   await ps.loadMyProfile()
