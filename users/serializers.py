@@ -14,6 +14,7 @@ from dj_rest_auth.serializers import LoginSerializer
 from dj_rest_auth.registration.serializers import RegisterSerializer
 
 from rest_framework_simplejwt.tokens import RefreshToken
+from .models import Post, PostImage
 
 User = get_user_model()
 
@@ -164,3 +165,36 @@ class CustomLoginSerializer(LoginSerializer):
         self.user = user
         
         return attrs
+    
+class PostImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PostImage
+        fields = ['image']
+
+    # 이미지 객체를 URL 문자열로 변환하여 ["url1", "url2"] 형태로 만듦
+    def to_representation(self, instance):
+        request = self.context.get('request')
+        if instance.image and request:
+            return request.build_absolute_uri(instance.image.url)
+        return instance.image.url if instance.image else None
+
+class PostSerializer(serializers.ModelSerializer):
+    writer_nickname = serializers.ReadOnlyField(source='writer.nickname')
+    writer_username = serializers.ReadOnlyField(source='writer.username') # Vue에서 사용 중이므로 추가 권장
+    
+    # 대표 이미지
+    image = serializers.ImageField(source='share_trip', read_only=True)
+
+    # 전체 이미지 리스트 (관련 모델인 PostImage에서 가져옴)
+    # 반드시 PostImage 모델의 ForeignKey에 related_name='images'가 설정되어 있어야 합니다.
+    images = PostImageSerializer(many=True, read_only=True)
+
+    like_count = serializers.IntegerField(read_only=True, default=0)
+    is_liked = serializers.BooleanField(read_only=True, default=False)
+
+    class Meta:
+        model = Post
+        fields = [
+            'id', 'writer_nickname', 'writer_username', 'title', 'content', 
+            'image', 'images', 'like_count', 'is_liked', 'created_at'
+        ]

@@ -13,23 +13,19 @@ urlpatterns = [
     
     # ===== 프로필 =====
     path('profile/', views.user_profile, name='user_profile'),
-    path('profile/search/', views.profile_search, name='profile_search'),  # ✅ search는 <nickname>보다 위!
+    path("api/profile/search/", views.profile_search, name="profile-search"),  # ✅ search는 <nickname>보다 위!
     path('profile/<str:nickname>/', views.user_profile, name='profile_detail'),
 
     # ===== 팔로우 =====
     path('follow/<str:nickname>/', views.follow_toggle, name='follow_toggle'),              # 일반용(필요시)
     path('follow/<str:nickname>/ajax/', views.follow_toggle_ajax, name='follow_toggle_ajax'),  # ✅ JS에서 쓰는 URL
+    # 설정
+    path("api/settings/follow-visibility/", views.follow_visibility_setting_api, name="follow-visibility-setting"),
 
-    path(
-        "profile/<str:nickname>/followers/ajax/",
-        views.followers_list_ajax,
-        name="followers_list_ajax",
-    ),
-    path(
-        "profile/<str:nickname>/followings/ajax/",
-        views.followings_list_ajax,
-        name="followings_list_ajax",
-    ),
+    # 팔로우 리스트(모달)
+    path("profile/<str:nickname>/followers/ajax/", views.followers_list_ajax, name="followers-list-ajax"),
+    path("profile/<str:nickname>/followings/ajax/", views.followings_list_ajax, name="followings-list-ajax"),
+
 
     # Vue용 프로필 데이터 API (추가)
     path('api/profile/me/', views.profile_me_api, name='profile_me_api'),
@@ -60,6 +56,11 @@ urlpatterns = [
     path("comment/<int:comment_id>/edit/ajax/", views.comment_update_ajax, name="comment_update_ajax"),
     path("comment/<int:comment_id>/delete/ajax/", views.comment_delete_ajax, name="comment_delete_ajax"),
 
+    # Vue에서 쓰는 회원탈퇴 API (JSON)
+    path('api/account/delete/', views.account_delete_api, name='account_delete_api'),
+    
+    # 기존 템플릿/폼 기반 탈퇴 (유지)
+    path('delete/', views.account_delete, name='account_delete'),
 
 
 ]

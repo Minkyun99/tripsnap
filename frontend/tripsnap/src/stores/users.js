@@ -1,15 +1,33 @@
 // src/stores/users.js
 import { defineStore } from 'pinia'
-import { getCsrfToken } from '@/utils/csrf'
+import { getCsrfToken } from '@/utils/csrf.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 
+async function parseErrorMessage(res, fallbackMessage) {
+  let message = fallbackMessage
+  try {
+    const data = await res.json()
+
+    if (data?.detail) return data.detail
+
+    const firstField = data && typeof data === 'object' ? Object.keys(data)[0] : null
+    if (firstField) {
+      const v = data[firstField]
+      if (Array.isArray(v) && v.length > 0) return String(v[0])
+      if (typeof v === 'string') return v
+    }
+  } catch {
+    // ignore
+  }
+  return message
+}
+
 export const useUserStore = defineStore('user', {
   state: () => ({
-    user: null,
+    user: null, // { email, username, nickname, ... }
     isLoading: false,
     error: null,
-    fieldErrors: {}, // ✅ 필드별 에러를 담아두면 화면에서 표시 가능
   }),
 
   getters: {
@@ -20,50 +38,9 @@ export const useUserStore = defineStore('user', {
   },
 
   actions: {
-    _resetErrors() {
-      this.error = null
-      this.fieldErrors = {}
-    },
-
-    async _parseError(res, defaultMessage) {
-      // dj-rest-auth/DRF는 보통 {field:[msg]} 또는 {detail:""} 형태
-      let data = null
-      try {
-        data = await res.json()
-      } catch {
-        // ignore
-      }
-
-      if (data && typeof data === 'object') {
-        // detail 우선
-        if (data.detail) {
-          this.error = data.detail
-          throw new Error(this.error)
-        }
-
-        // field errors
-        const fieldErrors = {}
-        for (const [k, v] of Object.entries(data)) {
-          if (Array.isArray(v) && v.length) fieldErrors[k] = v[0]
-          else if (typeof v === 'string') fieldErrors[k] = v
-        }
-        this.fieldErrors = fieldErrors
-
-        // 대표 메시지 구성
-        const firstKey = Object.keys(fieldErrors)[0]
-        const firstMsg = firstKey ? fieldErrors[firstKey] : defaultMessage
-        this.error = firstMsg || defaultMessage
-        throw new Error(this.error)
-      }
-
-      this.error = defaultMessage
-      throw new Error(defaultMessage)
-    },
-
-    // ✅ 회원가입: email + password1 + password2 만 전송 (A안)
     async register({ email, password1, password2 }) {
       this.isLoading = true
-      this._resetErrors()
+      this.error = null
 
       try {
         const res = await fetch(`${API_BASE}/api/auth/registration/`, {
@@ -77,51 +54,58 @@ export const useUserStore = defineStore('user', {
         })
 
         if (!res.ok) {
-          await this._parseError(res, '회원가입에 실패했습니다.')
+          const msg = await parseErrorMessage(res, '회원가입에 실패했습니다.')
+          throw new Error(msg)
         }
 
-        // 가입 성공 -> 서버가 세션/JWT 쿠키 세팅했다고 가정 -> user 로드
         await this.fetchMe()
-        if (!this.user) {
-          // 성공했는데도 user가 null이면 로그인 상태가 아닌 것
-          throw new Error('회원가입은 완료되었지만 로그인 상태를 확인할 수 없습니다.')
-        }
-
         return true
+      } catch (err) {
+        this.user = null
+        this.error = err?.message ?? '회원가입 중 오류가 발생했습니다.'
+        throw err
       } finally {
         this.isLoading = false
       }
     },
 
-    // 로그인: email + password
     async login({ email, password }) {
       this.isLoading = true
-      this._resetErrors()
+      this.error = null
 
       try {
         const res = await fetch(`${API_BASE}/api/auth/login/`, {
           method: 'POST',
-          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': getCsrfToken(),
           },
+          credentials: 'include',
           body: JSON.stringify({ email, password }),
         })
 
         if (!res.ok) {
-          await this._parseError(res, '로그인에 실패했습니다.')
+          const msg = await parseErrorMessage(res, '로그인에 실패했습니다.')
+          this.user = null
+          this.error = msg
+          return false
         }
 
         await this.fetchMe()
-        return !!this.user
+        return true
+      } catch (err) {
+        this.user = null
+        this.error = err?.message ?? '서버와 연결할 수 없습니다.'
+        return false
       } finally {
         this.isLoading = false
       }
     },
 
     async fetchMe() {
-      // 로그인 여부 확인은 초기 부팅 시 자주 호출되므로 에러로 다루지 않음
+      this.isLoading = true
+      this.error = null
+
       try {
         const res = await fetch(`${API_BASE}/api/auth/user/`, {
           credentials: 'include',
@@ -129,17 +113,82 @@ export const useUserStore = defineStore('user', {
 
         if (res.status === 401 || res.status === 403) {
           this.user = null
-          return
+          return null
         }
 
         if (!res.ok) {
-          this.user = null
-          return
+          const msg = await parseErrorMessage(res, '유저 정보를 가져오는 중 오류가 발생했습니다.')
+          throw new Error(msg)
         }
 
-        this.user = await res.json()
-      } catch {
+        const data = await res.json()
+        this.user = data
+        return data
+      } catch (err) {
         this.user = null
+        this.error = err?.message ?? '유저 정보를 가져오는 중 오류가 발생했습니다.'
+        return null
+      } finally {
+        this.isLoading = false
+      }
+    },
+
+    async changePassword({ old_password, new_password1, new_password2 }) {
+      this.isLoading = true
+      this.error = null
+
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/password/change/`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+          },
+          body: JSON.stringify({ old_password, new_password1, new_password2 }),
+        })
+
+        if (!res.ok) {
+          const msg = await parseErrorMessage(res, '비밀번호 변경에 실패했습니다.')
+          throw new Error(msg)
+        }
+
+        return true
+      } catch (err) {
+        this.error = err?.message ?? '비밀번호 변경 중 오류가 발생했습니다.'
+        throw err
+      } finally {
+        this.isLoading = false
+      }
+    },
+
+    async deleteAccount() {
+      this.isLoading = true
+      this.error = null
+
+      try {
+        const res = await fetch(`${API_BASE}/users/api/account/delete/`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+          },
+          body: JSON.stringify({}),
+        })
+
+        if (!res.ok) {
+          const msg = await parseErrorMessage(res, '회원 탈퇴에 실패했습니다.')
+          throw new Error(msg)
+        }
+
+        this.user = null
+        return true
+      } catch (err) {
+        this.error = err?.message ?? '회원 탈퇴 중 오류가 발생했습니다.'
+        throw err
+      } finally {
+        this.isLoading = false
       }
     },
 
@@ -150,22 +199,71 @@ export const useUserStore = defineStore('user', {
 
     async logout() {
       this.isLoading = true
-      this._resetErrors()
+      this.error = null
 
       try {
-        await fetch(`${API_BASE}/api/auth/logout/`, {
+        const res = await fetch(`${API_BASE}/api/auth/logout/`, {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': getCsrfToken(),
           },
-          credentials: 'include',
           body: JSON.stringify({}),
         })
+
+        if (!res.ok) {
+          const msg = await parseErrorMessage(res, '로그아웃에 실패했습니다.')
+          console.warn('logout not ok:', msg)
+        }
+      } catch (err) {
+        console.error('logout error:', err)
       } finally {
         this.user = null
         this.isLoading = false
       }
     },
+
+    // ✅ 팔로우 목록 공개 범위 조회
+    async fetchFollowVisibility() {
+      const res = await fetch(`${API_BASE}/users/api/settings/follow-visibility/`, {
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const msg = await parseErrorMessage(res, '설정 정보를 불러오지 못했습니다.')
+        throw new Error(msg)
+      }
+      return await res.json()
+    },
+
+    // ✅ 팔로우 목록 공개 범위 저장
+    async updateFollowVisibility(value) {
+      // ✅ 백엔드 허용 값에 맞춰 강제 정규화 (public|following_only|private)
+      const normalized = value === 'followers' ? 'following_only' : value // 과거 값이 남아있을 경우 방어
+
+      const allowed = new Set(['public', 'following_only', 'private'])
+      if (!allowed.has(normalized)) {
+        throw new Error('follow_visibility 값이 올바르지 않습니다.')
+      }
+
+      const res = await fetch(`${API_BASE}/users/api/settings/follow-visibility/`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({ follow_visibility: normalized }),
+      })
+
+      if (!res.ok) {
+        const msg = await parseErrorMessage(res, '공개 범위 변경에 실패했습니다.')
+        throw new Error(msg)
+      }
+      return await res.json()
+    },
   },
 })
+
+// ✅ 일부 코드가 default import로 가져오는 경우도 있으니 안전장치
+export default useUserStore

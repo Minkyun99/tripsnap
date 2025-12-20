@@ -40,6 +40,18 @@ class User(AbstractUser):
         blank=True,
     )
 
+    class FollowVisibility(models.TextChoices):
+        PUBLIC = "public", _("전체 공개")
+        FOLLOWERS = "followers", _("내 팔로워에게만 공개")
+        PRIVATE = "private", _("비공개")
+
+    follow_visibility = models.CharField(
+        _("팔로우 목록 공개 범위"),
+        max_length=20,
+        choices=FollowVisibility.choices,
+        default=FollowVisibility.PUBLIC,
+    )
+
     USERNAME_FIELD = 'email'  # ✅ 이메일로 로그인
     REQUIRED_FIELDS = []  # ✅ email이 USERNAME_FIELD이므로 비워둠
 
@@ -139,7 +151,7 @@ class Post(models.Model):
     content = models.TextField(_("내용"))
 
     share_trip = models.ImageField(
-        _("여행 사진"),
+        _("대표 이미지"), 
         upload_to="posts/",
         blank=True,
         null=True,
@@ -155,6 +167,17 @@ class Post(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.writer.nickname})"
+    
+
+class PostImage(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(_("사진"), upload_to="posts/multiple/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("게시글 사진")
+        verbose_name_plural = _("게시글 사진")
+
 
 
 # ---------------------------------------------------
