@@ -1,8 +1,9 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
+from django.db import transaction
 
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
@@ -10,10 +11,20 @@ from rest_framework import status
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from .rag_wrapper import RAGWrapper
-from .models import Conversation, Message
+from .models import Conversation, Message, Bakery, BakeryLike, BakeryComment
+from .serializers import (
+    BakeryListSerializer,
+    BakeryDetailSerializer,
+    BakeryCommentSerializer,
+    BakeryCommentCreateSerializer,
+)
 
 import json
 
+
+# ==========================================
+# 기존 Chatbot Views
+# ==========================================
 
 # 1) 기존과 동일: /chatbot/ → 키워드 선택 템플릿
 @login_required
@@ -29,7 +40,6 @@ def chatbot(request):
 #    → 기존 chat(GET)에서 하던 Conversation 생성 + META 저장 + 초기 봇 메시지 2개 생성 로직을
 #      JSON 기반으로 옮긴 버전입니다.
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def chat_init(request):
     """
     Vue의 KeywordSelectionView에서 호출하는 초기화 엔드포인트.
@@ -56,6 +66,11 @@ def chat_init(request):
         ]
       }
     """
+    # 인증 체크
+    user = request.user
+    if not user or not user.is_authenticated:
+        return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
+    
     data = request.data
 
     preference = (data.get('preference') or '').strip()
@@ -70,7 +85,7 @@ def chat_init(request):
         )
 
     # Conversation 생성 (기존 GET chat 로직과 동일)
-    conv = Conversation.objects.create(user=request.user)
+    conv = Conversation.objects.create(user=user)
 
     meta = {
         'preference': preference,
@@ -228,10 +243,257 @@ def chat(request):
             content=llm_response,
         )
 
+    # RAG 결과를 DB의 Bakery 객체와 매핑
+    rag_results = result.get('results', [])
+    enriched_results = []
+    
+    for rag_result in rag_results:
+        # RAG 결과에서 빵집 이름 추출 (place_name 또는 name)
+        bakery_name = rag_result.get('place_name') or rag_result.get('name', '')
+        
+        if not bakery_name:
+            continue
+        
+        try:
+            # DB에서 빵집 조회
+            bakery = Bakery.objects.get(name=bakery_name)
+            
+            # DB 데이터로 enriched 결과 생성
+            enriched_results.append({
+                'id': bakery.id,  # DB의 실제 ID
+                'name': bakery.name,
+                'place_name': bakery.name,  # 프론트엔드 호환성
+                'district': bakery.district,
+                'address': bakery.road_address or bakery.jibun_address,
+                'rating': bakery.naver_rate or bakery.kakao_rate,
+                'phone': bakery.phone,
+                'url': bakery.url,
+            })
+        except Bakery.DoesNotExist:
+            # DB에 없으면 RAG 결과 그대로 사용 (id 없음)
+            enriched_results.append(rag_result)
+        except Bakery.MultipleObjectsReturned:
+            # 중복된 이름이면 첫 번째 것 사용
+            bakery = Bakery.objects.filter(name=bakery_name).first()
+            enriched_results.append({
+                'id': bakery.id,
+                'name': bakery.name,
+                'place_name': bakery.name,
+                'district': bakery.district,
+                'address': bakery.road_address or bakery.jibun_address,
+                'rating': bakery.naver_rate or bakery.kakao_rate,
+                'phone': bakery.phone,
+                'url': bakery.url,
+            })
+
     return Response(
         {
             'llm_response': llm_response,
-            'results': result.get('results', []),
+            'results': enriched_results,
         },
         status=status.HTTP_200_OK,
     )
+
+
+# ==========================================
+# Bakery Views (FBV로 작성)
+# ==========================================
+
+@api_view(['GET'])
+def bakery_list(request):
+    """
+    빵집 목록 조회 (검색, 필터링)
+    GET /api/bakery/
+    
+    Query Parameters:
+        - district: 구 필터링 (예: district=동구)
+        - search: 이름 검색 (예: search=하늘만큼)
+        - ordering: 정렬 (예: ordering=-like_count)
+    """
+    queryset = Bakery.objects.all()
+    
+    # 구 필터링
+    district = request.query_params.get('district', None)
+    if district:
+        queryset = queryset.filter(district=district)
+    
+    # 이름 검색
+    search = request.query_params.get('search', None)
+    if search:
+        queryset = queryset.filter(name__icontains=search)
+    
+    # 정렬
+    ordering = request.query_params.get('ordering', '-like_count')
+    queryset = queryset.order_by(ordering)
+    
+    serializer = BakeryListSerializer(queryset, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def bakery_detail(request, bakery_id):
+    """
+    빵집 상세 정보 조회
+    GET /api/bakery/<bakery_id>/
+    """
+    bakery = get_object_or_404(Bakery, id=bakery_id)
+    serializer = BakeryDetailSerializer(bakery, context={'request': request})
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def bakery_like_toggle(request, bakery_id):
+    """
+    빵집 좋아요 토글
+    POST /api/bakery/<bakery_id>/like/
+    
+    Returns:
+        {
+            "is_liked": true/false,
+            "like_count": 123
+        }
+    """
+    # 인증 체크
+    user = request.user
+    if not user or not user.is_authenticated:
+        return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    bakery = get_object_or_404(Bakery, id=bakery_id)
+    
+    try:
+        with transaction.atomic():
+            # 좋아요 존재 여부 확인
+            like, created = BakeryLike.objects.get_or_create(
+                bakery=bakery,
+                user=user
+            )
+            
+            if not created:
+                # 이미 좋아요가 있으면 삭제 (토글)
+                like.delete()
+                bakery.like_count = max(0, bakery.like_count - 1)
+                bakery.save(update_fields=['like_count'])
+                is_liked = False
+            else:
+                # 새로 좋아요 생성
+                bakery.like_count += 1
+                bakery.save(update_fields=['like_count'])
+                is_liked = True
+            
+            return Response({
+                'is_liked': is_liked,
+                'like_count': bakery.like_count,
+            }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response(
+            {'detail': f'좋아요 처리 중 오류가 발생했습니다: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def bakery_comments_list(request, bakery_id):
+    """
+    빵집 댓글 목록 조회
+    GET /api/bakery/<bakery_id>/comments/
+    """
+    comments = BakeryComment.objects.filter(
+        bakery_id=bakery_id
+    ).select_related('user').order_by('-created_at')
+    
+    serializer = BakeryCommentSerializer(comments, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def bakery_comment_create(request, bakery_id):
+    """
+    빵집 댓글 작성
+    POST /api/bakery/<bakery_id>/comments/create/
+    
+    Request Body:
+        {
+            "content": "맛있어요!"
+        }
+    """
+    # 인증 체크
+    user = request.user
+    if not user or not user.is_authenticated:
+        return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    bakery = get_object_or_404(Bakery, id=bakery_id)
+    
+    serializer = BakeryCommentCreateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        with transaction.atomic():
+            # 댓글 저장
+            comment = serializer.save(
+                user=user,
+                bakery=bakery
+            )
+            
+            # 빵집의 댓글 수 증가
+            bakery.comment_count += 1
+            bakery.save(update_fields=['comment_count'])
+        
+        # 생성된 댓글 정보 반환
+        output_serializer = BakeryCommentSerializer(comment)
+        return Response(
+            output_serializer.data,
+            status=status.HTTP_201_CREATED
+        )
+    
+    except Exception as e:
+        return Response(
+            {'detail': f'댓글 작성 중 오류가 발생했습니다: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['DELETE'])
+def bakery_comment_delete(request, bakery_id, comment_id):
+    """
+    빵집 댓글 삭제 (본인만 가능)
+    DELETE /api/bakery/<bakery_id>/comments/<comment_id>/
+    """
+    # 인증 체크
+    user = request.user
+    if not user or not user.is_authenticated:
+        return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    comment = get_object_or_404(
+        BakeryComment,
+        id=comment_id,
+        bakery_id=bakery_id
+    )
+    
+    # 본인 확인
+    if comment.user != user:
+        return Response(
+            {'detail': '본인의 댓글만 삭제할 수 있습니다.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        with transaction.atomic():
+            bakery = comment.bakery
+            comment.delete()
+            
+            # 빵집의 댓글 수 감소
+            bakery.comment_count = max(0, bakery.comment_count - 1)
+            bakery.save(update_fields=['comment_count'])
+        
+        return Response(
+            {'detail': '댓글이 삭제되었습니다.'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+    
+    except Exception as e:
+        return Response(
+            {'detail': f'댓글 삭제 중 오류가 발생했습니다: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
