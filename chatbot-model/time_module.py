@@ -5,6 +5,24 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from schemas import DateTimeConstraint
 
+class DateTimeParser:
+    """
+    시간/날짜 관련 함수를 감싸는 래퍼 클래스.
+    기존 코드에서 self.time_parser.extract_datetime_constraint(query)
+    형태로 호출할 수 있게 해주는 호환용 클래스입니다.
+    """
+
+    def extract_datetime_constraint(self, query: str):
+        # 기존 parse_date_time_from_query를 그대로 재사용
+        return parse_date_time_from_query(query)
+
+    def is_open_at(self, business_hours, dt):
+        return is_open_at(business_hours, dt)
+
+    def is_available_in_period(self, business_hours, start_dt, end_dt):
+        return is_available_in_period(business_hours, start_dt, end_dt)
+    
+
 WEEKDAYS = ["monday", "tuesday", "wednesday",
             "thursday", "friday", "saturday", "sunday"]
 
