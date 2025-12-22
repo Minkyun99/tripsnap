@@ -40,7 +40,10 @@ from ranking_utils import (
     haversine_distance_km,
     estimate_walk_time_minutes,
     estimate_transit_time_minutes,
+    _safe_rating,
 )
+
+
 
 try:
     from openai import OpenAI
@@ -1745,17 +1748,17 @@ class BakeryExpertRAG:
 
 
 def _safe_get_rating(bakery: Dict[str, Any]) -> float:
-    rating_info = bakery.get("rating") or {}
-    raw = rating_info.get("naver_rate") or rating_info.get("kakao_rate")
-    if not raw:
-        return 0.0
+    """
+    ranking_utils._safe_rating 을 그대로 래핑해서 사용.
+    - 내부에서는 0~5 스케일의 통합 평점을 반환한다.
+    """
     try:
-        return float(raw)
+        return float(_safe_rating(bakery))
     except Exception:
-        try:
-            return float(str(raw).replace(",", ""))
-        except Exception:
-            return 0.0
+        return 0.0
+
+
+
 
 
 def build_menu_focus_sentence(menu_keywords: List[str], has_menu_focus: bool) -> str:
