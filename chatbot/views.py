@@ -20,6 +20,184 @@ from .serializers import (
 )
 
 import json
+import re
+import logging
+
+# 로거 설정
+logger = logging.getLogger(__name__)
+
+
+# ==========================================
+# 유틸리티 함수
+# ==========================================
+
+def normalize_bakery_name(name):
+    """
+    빵집 이름을 정규화하여 매칭률을 높입니다.
+    - 공백 제거
+    - 괄호 및 괄호 내용 제거
+    - 특수문자 제거
+    """
+    if not name:
+        return ""
+    
+    # 괄호와 괄호 안의 내용 제거 (예: "하늘만큼 땅만큼(대전본점)" → "하늘만큼 땅만큼")
+    name = re.sub(r'\([^)]*\)', '', name)
+    name = re.sub(r'\[[^\]]*\]', '', name)
+    
+    # 공백 제거
+    name = name.replace(' ', '')
+    
+    # 특수문자 제거 (한글, 영문, 숫자만 남김)
+    name = re.sub(r'[^가-힣a-zA-Z0-9]', '', name)
+    
+    return name.strip()
+
+
+def find_bakery_fuzzy(bakery_name):
+    """
+    퍼지 매칭을 통해 DB에서 빵집을 찾습니다.
+    1. 정확한 이름으로 검색
+    2. 정규화된 이름으로 검색
+    3. 부분 매칭 검색
+    """
+    if not bakery_name:
+        return None
+    
+    # 1. 정확한 이름으로 검색
+    try:
+        return Bakery.objects.get(name=bakery_name)
+    except Bakery.DoesNotExist:
+        pass
+    except Bakery.MultipleObjectsReturned:
+        return Bakery.objects.filter(name=bakery_name).first()
+    
+    # 2. 정규화된 이름으로 검색
+    normalized_search = normalize_bakery_name(bakery_name)
+    if normalized_search:
+        for bakery in Bakery.objects.all():
+            if normalize_bakery_name(bakery.name) == normalized_search:
+                return bakery
+    
+    # 3. 부분 매칭 (이름에 포함되는지 확인)
+    if len(bakery_name) >= 3:  # 너무 짧은 이름은 부정확할 수 있음
+        try:
+            # 공백 제거한 이름으로 icontains 검색
+            clean_name = bakery_name.replace(' ', '')
+            candidates = Bakery.objects.filter(name__icontains=clean_name)
+            if candidates.exists():
+                return candidates.first()
+        except Exception:
+            pass
+    
+    return None
+
+
+def is_recommendation_response(llm_response):
+    """
+    LLM 응답이 실제로 빵집을 추천하는 내용인지 확인합니다.
+    
+    추천 응답으로 간주되는 경우:
+    - "추천", "코스", "매장" 등의 키워드 포함
+    - "1.", "2.", "3." 같은 리스트 형식
+    - 구체적인 빵집 이름이나 주소 언급
+    
+    추천 응답이 아닌 경우:
+    - "찾지 못했다", "없습니다" 등 실패 메시지
+    - "종류", "차이", "역사", "만드는 법" 등 지식 설명
+    
+    Args:
+        llm_response (str): LLM의 응답 텍스트
+        
+    Returns:
+        bool: 빵집 추천 응답이면 True, 아니면 False
+    """
+    if not llm_response:
+        return False
+    
+    # 1. 실패 메시지 키워드 체크 (최우선)
+    failure_keywords = [
+        "찾지 못했습니다",
+        "찾을 수 없습니다",
+        "조건에 맞는 빵집이 없",
+        "해당하는 빵집이 없",
+        "추천할 빵집이 없",
+        "적합한 빵집이 없",
+        "검색 결과가 없",
+    ]
+    
+    for keyword in failure_keywords:
+        if keyword in llm_response:
+            logger.info(f"🚫 [NOT_RECOMMENDATION] 실패 키워드 '{keyword}' 감지")
+            return False
+    
+    # 2. 지식/설명 모드 키워드 체크
+    knowledge_keywords = [
+        "종류가 있",
+        "종류는",
+        "차이점",
+        "차이가",
+        "역사",
+        "기원",
+        "유래",
+        "만드는 법",
+        "만드는 방법",
+        "레시피",
+        "특징은",
+        "정의는",
+    ]
+    
+    knowledge_count = 0
+    for keyword in knowledge_keywords:
+        if keyword in llm_response:
+            knowledge_count += 1
+    
+    # 지식 키워드가 2개 이상이면 지식 모드로 판단
+    if knowledge_count >= 2:
+        logger.info(f"🚫 [NOT_RECOMMENDATION] 지식 모드로 판단 (키워드 {knowledge_count}개)")
+        return False
+    
+    # 3. 추천 키워드 체크
+    recommendation_keywords = [
+        "추천드립니다",
+        "추천드려요",
+        "추천해드립니다",
+        "추천합니다",
+        "코스",
+        "방문하시면",
+        "가보시면",
+        "매장",
+        "빵집",
+        "베이커리",
+        "이동 시간",
+        "영업시간",
+        "주소",
+        "전화",
+    ]
+    
+    recommendation_count = 0
+    for keyword in recommendation_keywords:
+        if keyword in llm_response:
+            recommendation_count += 1
+    
+    # 4. 리스트 형식 체크 (1., 2., 3. 또는 ①, ②, ③)
+    has_numbered_list = bool(re.search(r'[1-9]\.|①|②|③|④|⑤', llm_response))
+    
+    # 5. 판단 로직
+    # - 추천 키워드가 2개 이상 있으면 추천 모드
+    # - 또는 번호 리스트 + 추천 키워드 1개 이상
+    is_recommendation = False
+    
+    if recommendation_count >= 2:
+        is_recommendation = True
+        logger.info(f"✅ [IS_RECOMMENDATION] 추천 키워드 {recommendation_count}개 감지")
+    elif has_numbered_list and recommendation_count >= 1:
+        is_recommendation = True
+        logger.info(f"✅ [IS_RECOMMENDATION] 번호 리스트 + 추천 키워드 감지")
+    else:
+        logger.info(f"🚫 [NOT_RECOMMENDATION] 추천 응답 조건 미충족 (키워드: {recommendation_count}, 리스트: {has_numbered_list})")
+    
+    return is_recommendation
 
 
 # ==========================================
@@ -37,8 +215,6 @@ def chatbot(request):
 
 
 # 2) Vue용 초기화 API: /chatbot/init/ (POST)
-#    → 기존 chat(GET)에서 하던 Conversation 생성 + META 저장 + 초기 봇 메시지 2개 생성 로직을
-#      JSON 기반으로 옮긴 버전입니다.
 @api_view(['POST'])
 def chat_init(request):
     """
@@ -84,7 +260,7 @@ def chat_init(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Conversation 생성 (기존 GET chat 로직과 동일)
+    # Conversation 생성
     conv = Conversation.objects.create(user=user)
 
     meta = {
@@ -100,7 +276,7 @@ def chat_init(request):
         content='__META__:' + json.dumps(meta, ensure_ascii=False),
     )
 
-    # 안내용 초기 봇 메시지 2개 생성 (기존과 동일)
+    # 안내용 초기 봇 메시지 2개 생성
     summary = f"선택하신 키워드: {preference}"
     prompt = "원하시는 것을 더 자세히 설명해주시겠어요? 그냥 추천해달라고 하시면 바로 추천을 시작할게요."
 
@@ -124,8 +300,6 @@ def chat_init(request):
 
 
 # 3) 실제 대화 API: /chatbot/chat/ (POST)
-#    → 아래 로직은 질문에 주신 기존 chat(view)를
-#      Vue + JSON 환경에 맞게 그대로 옮긴 것입니다.
 @ensure_csrf_cookie
 @api_view(['POST'])
 def chat(request):
@@ -143,10 +317,10 @@ def chat(request):
     응답(JSON):
       {
         "llm_response": "...",
-        "results": [ ... RAG 추천 결과 ... ]
+        "results": [ ... RAG 추천 결과 ... ]  # 추천일 때만 포함
       }
     """
-    # 수동 인증 검사: 기존 코드 그대로 유지
+    # 수동 인증 검사
     user = request.user
     if not user or not user.is_authenticated:
         return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -157,7 +331,6 @@ def chat(request):
     # 클라이언트로부터 온 메시지와 대화 ID, 선택적 trigger 플래그를 읽습니다.
     message = data.get('message')
     conversation_id = data.get('conversation_id')
-    # trigger가 True이면 RAG(LLM) 호출; 아니면 단순 저장만 수행합니다.
     trigger = data.get('trigger')
 
     if not message:
@@ -167,7 +340,6 @@ def chat(request):
     conv = None
     if conversation_id:
         try:
-            # 사용자 소유의 대화인지 한 번 더 체크 (보안 강화)
             conv = Conversation.objects.get(id=conversation_id, user=user)
         except Conversation.DoesNotExist:
             conv = None
@@ -182,7 +354,7 @@ def chat(request):
         content=message,
     )
 
-    # RAG 호출 여부 결정: 기존 코드 로직 그대로
+    # RAG 호출 여부 결정
     should_call_rag = False
     if trigger and str(trigger).lower() in ['1', 'true', 'yes']:
         should_call_rag = True
@@ -190,7 +362,6 @@ def chat(request):
         should_call_rag = True
 
     if not should_call_rag:
-        # RAG를 호출하지 않고 저장만 한 경우, 저장 완료 응답을 반환합니다.
         return Response({'saved': True})
 
     # 대화에서 메타 시스템 메시지를 찾아 region/keywords 등을 복원합니다.
@@ -226,10 +397,14 @@ def chat(request):
     if parts:
         prompt_for_rag = "\n".join(parts) + "\n" + message
 
-    # ✅ 기존 코드와 동일하게 RAGWrapper.chat 호출
+    # RAGWrapper.chat 호출
     try:
+        logger.info(f"🔍 [DEBUG] RAG 호출 시작 - 프롬프트: {prompt_for_rag}")
         result = RAGWrapper.chat(message=prompt_for_rag, use_llm=True)
+        logger.info(f"🔍 [DEBUG] RAG 응답 받음 - result keys: {result.keys()}")
+        logger.info(f"🔍 [DEBUG] RAG results 개수: {len(result.get('results', []))}")
     except Exception as e:
+        logger.error(f"❌ [DEBUG] RAG 호출 실패: {str(e)}")
         return Response(
             {'detail': f'추천 엔진 호출 중 오류가 발생했습니다: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -237,44 +412,46 @@ def chat(request):
 
     llm_response = result.get('llm_response')
     if llm_response:
+        logger.info(f"💬 [DEBUG] LLM 응답 (앞 200자): {llm_response[:200]}...")
         Message.objects.create(
             conversation=conv,
             sender=Message.SENDER_BOT,
             content=llm_response,
         )
 
-    # RAG 결과를 DB의 Bakery 객체와 매핑
+    # ✨✨ 핵심 개선: LLM 응답이 실제 추천 내용인지 확인 ✨✨
+    if not is_recommendation_response(llm_response):
+        logger.info("🚫 [NOT_RECOMMENDATION] 추천 응답이 아님 - results를 포함하지 않습니다")
+        response_data = {
+            'llm_response': llm_response,
+            # results 키를 아예 포함하지 않음!
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    # 여기까지 왔다면 정상적인 추천 응답
+    logger.info("✅ [IS_RECOMMENDATION] 추천 응답으로 판단 - results 처리 시작")
+
+    # 퍼지 매칭을 사용한 DB 매핑
     rag_results = result.get('results', [])
+    logger.info(f"🍞 [DEBUG] RAG에서 반환한 빵집 수: {len(rag_results)}")
+    
     enriched_results = []
     
-    for rag_result in rag_results:
-        # RAG 결과에서 빵집 이름 추출 (place_name 또는 name)
+    for idx, rag_result in enumerate(rag_results):
+        # RAG 결과에서 빵집 이름 추출
         bakery_name = rag_result.get('place_name') or rag_result.get('name', '')
+        logger.info(f"🔍 [DEBUG] [{idx+1}] RAG 빵집 이름: {bakery_name}")
         
         if not bakery_name:
+            logger.warning(f"⚠️ [DEBUG] [{idx+1}] 빵집 이름 없음 - 건너뜀")
             continue
         
-        try:
-            # DB에서 빵집 조회
-            bakery = Bakery.objects.get(name=bakery_name)
-            
-            # DB 데이터로 enriched 결과 생성
-            enriched_results.append({
-                'id': bakery.id,  # DB의 실제 ID
-                'name': bakery.name,
-                'place_name': bakery.name,  # 프론트엔드 호환성
-                'district': bakery.district,
-                'address': bakery.road_address or bakery.jibun_address,
-                'rating': bakery.naver_rate or bakery.kakao_rate,
-                'phone': bakery.phone,
-                'url': bakery.url,
-            })
-        except Bakery.DoesNotExist:
-            # DB에 없으면 RAG 결과 그대로 사용 (id 없음)
-            enriched_results.append(rag_result)
-        except Bakery.MultipleObjectsReturned:
-            # 중복된 이름이면 첫 번째 것 사용
-            bakery = Bakery.objects.filter(name=bakery_name).first()
+        # 퍼지 매칭으로 DB에서 빵집 찾기
+        bakery = find_bakery_fuzzy(bakery_name)
+        
+        if bakery:
+            logger.info(f"✅ [DEBUG] [{idx+1}] DB 매칭 성공 - ID: {bakery.id}, 이름: {bakery.name}")
+            # DB 매칭 성공
             enriched_results.append({
                 'id': bakery.id,
                 'name': bakery.name,
@@ -285,14 +462,36 @@ def chat(request):
                 'phone': bakery.phone,
                 'url': bakery.url,
             })
+        else:
+            logger.warning(f"⚠️ [DEBUG] [{idx+1}] DB에 없는 빵집 - RAG 결과 그대로 사용: {bakery_name}")
+            # DB에 없으면 RAG 결과 그대로 사용
+            enriched_results.append({
+                'id': None,  # 명시적으로 None 설정
+                'name': bakery_name,
+                'place_name': bakery_name,
+                'district': rag_result.get('district', ''),
+                'address': rag_result.get('address', ''),
+                'rating': rag_result.get('rating', ''),
+                'phone': rag_result.get('phone', ''),
+                'url': rag_result.get('url', ''),
+            })
 
-    return Response(
-        {
-            'llm_response': llm_response,
-            'results': enriched_results,
-        },
-        status=status.HTTP_200_OK,
-    )
+    logger.info(f"📊 [DEBUG] 최종 enriched_results 개수: {len(enriched_results)}")
+
+    # enriched_results가 있을 때만 results를 응답에 포함
+    response_data = {
+        'llm_response': llm_response,
+    }
+    
+    if enriched_results:
+        response_data['results'] = enriched_results
+        logger.info(f"✅ [DEBUG] results를 응답에 포함 - {len(enriched_results)}개 빵집")
+    else:
+        logger.warning(f"⚠️ [DEBUG] enriched_results가 비어있음 - results 미포함")
+    
+    logger.info(f"🎯 [DEBUG] 최종 응답 keys: {response_data.keys()}")
+    
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 # ==========================================
@@ -353,7 +552,6 @@ def bakery_like_toggle(request, bakery_id):
             "like_count": 123
         }
     """
-    # 인증 체크
     user = request.user
     if not user or not user.is_authenticated:
         return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -362,20 +560,17 @@ def bakery_like_toggle(request, bakery_id):
     
     try:
         with transaction.atomic():
-            # 좋아요 존재 여부 확인
             like, created = BakeryLike.objects.get_or_create(
                 bakery=bakery,
                 user=user
             )
             
             if not created:
-                # 이미 좋아요가 있으면 삭제 (토글)
                 like.delete()
                 bakery.like_count = max(0, bakery.like_count - 1)
                 bakery.save(update_fields=['like_count'])
                 is_liked = False
             else:
-                # 새로 좋아요 생성
                 bakery.like_count += 1
                 bakery.save(update_fields=['like_count'])
                 is_liked = True
@@ -417,7 +612,6 @@ def bakery_comment_create(request, bakery_id):
             "content": "맛있어요!"
         }
     """
-    # 인증 체크
     user = request.user
     if not user or not user.is_authenticated:
         return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -430,17 +624,14 @@ def bakery_comment_create(request, bakery_id):
     
     try:
         with transaction.atomic():
-            # 댓글 저장
             comment = serializer.save(
                 user=user,
                 bakery=bakery
             )
             
-            # 빵집의 댓글 수 증가
             bakery.comment_count += 1
             bakery.save(update_fields=['comment_count'])
         
-        # 생성된 댓글 정보 반환
         output_serializer = BakeryCommentSerializer(comment)
         return Response(
             output_serializer.data,
@@ -460,7 +651,6 @@ def bakery_comment_delete(request, bakery_id, comment_id):
     빵집 댓글 삭제 (본인만 가능)
     DELETE /api/bakery/<bakery_id>/comments/<comment_id>/
     """
-    # 인증 체크
     user = request.user
     if not user or not user.is_authenticated:
         return Response({'detail': '로그인 필요'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -471,7 +661,6 @@ def bakery_comment_delete(request, bakery_id, comment_id):
         bakery_id=bakery_id
     )
     
-    # 본인 확인
     if comment.user != user:
         return Response(
             {'detail': '본인의 댓글만 삭제할 수 있습니다.'},
@@ -483,7 +672,6 @@ def bakery_comment_delete(request, bakery_id, comment_id):
             bakery = comment.bakery
             comment.delete()
             
-            # 빵집의 댓글 수 감소
             bakery.comment_count = max(0, bakery.comment_count - 1)
             bakery.save(update_fields=['comment_count'])
         
