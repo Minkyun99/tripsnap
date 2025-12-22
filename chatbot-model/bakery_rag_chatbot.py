@@ -294,7 +294,7 @@ class BakeryExpertRAG:
         self,
         user_query: str,
         ranked: List[Tuple[Dict[str, Any], float]],
-        max_items: int = 10,
+        max_items: int = 3,
     ) -> List[Tuple[Dict[str, Any], float]]:
         if self.llm_client is None:
             return ranked

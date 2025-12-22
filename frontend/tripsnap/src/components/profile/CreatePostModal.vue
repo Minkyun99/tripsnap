@@ -1,6 +1,18 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useProfileStore } from '../../stores/profile'
+
+// ✨ props 추가 - 미리 채워진 제목/내용 (선택적)
+const props = defineProps({
+  prefilledTitle: {
+    type: String,
+    default: ''
+  },
+  prefilledContent: {
+    type: String,
+    default: ''
+  }
+})
 
 const emit = defineEmits(['close'])
 const ps = useProfileStore()
@@ -12,6 +24,16 @@ const selectedFiles = ref([]) // 여러 파일을 담을 배열
 const previewUrls = ref([])   // 미리보기 URL을 담을 배열
 const isLoading = ref(false)
 const error = ref('')
+
+// ✨ 컴포넌트 마운트 시 미리 채워진 내용 설정 (있을 경우에만)
+onMounted(() => {
+  if (props.prefilledTitle) {
+    title.value = props.prefilledTitle
+  }
+  if (props.prefilledContent) {
+    content.value = props.prefilledContent
+  }
+})
 
 // 파일 선택 창 열기
 function openFilePicker() {

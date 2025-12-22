@@ -19,7 +19,7 @@ if env_path.is_file():
 
 SECRET_KEY = os.environ.get("django_secret_key")
 DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["43.201.75.252", "localhost", "127.0.0.1"]
 
 # ===============================================
 # Applications
@@ -246,10 +246,12 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://marvelous-faun-4b98d8.netlify.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://marvelous-faun-4b98d8.netlify.app",
 ]
