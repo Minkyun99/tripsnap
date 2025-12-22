@@ -387,15 +387,24 @@ def chat(request):
         region_context = ''
         keywords_context = ''
 
-    # 프롬프트에 지역 및 선호 키워드를 포함
+    # 프롬프트에 지역 및 선호 키워드를 자연스럽게 포함
+    # "지역:", "선호:" 같은 형식은 Kakao API에서 오인식될 수 있으므로 자연스러운 문장으로 변경
     prompt_for_rag = message
-    parts = []
+    
+    # 컨텍스트를 자연스러운 문장으로 변환
+    context_parts = []
     if region_context:
-        parts.append(f"지역: {region_context}")
+        # "지역: 유성구" → "유성구에서"
+        context_parts.append(f"{region_context}에서")
     if keywords_context:
-        parts.append(f"선호: {keywords_context}")
-    if parts:
-        prompt_for_rag = "\n".join(parts) + "\n" + message
+        # "선호: 건강빵" → "건강빵 관련"
+        if keywords_context.strip():  # 빈 문자열이 아닐 때만
+            context_parts.append(f"{keywords_context} 관련")
+    
+    if context_parts:
+        # "유성구에서 건강빵 관련 건강빵 추천해줘" 형식
+        context_str = " ".join(context_parts)
+        prompt_for_rag = f"{context_str} {message}"
 
     # RAGWrapper.chat 호출
     try:
@@ -431,50 +440,127 @@ def chat(request):
     # 여기까지 왔다면 정상적인 추천 응답
     logger.info("✅ [IS_RECOMMENDATION] 추천 응답으로 판단 - results 처리 시작")
 
-    # 퍼지 매칭을 사용한 DB 매핑
-    rag_results = result.get('results', [])
-    logger.info(f"🍞 [DEBUG] RAG에서 반환한 빵집 수: {len(rag_results)}")
+    # ✨✨ 개선: LLM 응답에서 빵집 이름을 파싱하여 results 생성 ✨✨
+    def extract_bakery_names_from_llm_response(llm_text: str) -> list:
+        """
+        LLM 응답에서 추천된 빵집 이름을 파싱합니다.
+        
+        예시 패턴:
+        - "🥖 추천 1: 더 베이커"
+        - "🥖 추천 2: 폴레폴레 유성본점"
+        """
+        import re
+        
+        # 패턴 1: "🥖 추천 N: 빵집이름" 형식
+        pattern1 = r'🥖\s*추천\s*\d+\s*:\s*([^\n=]+?)(?:\n|=|$)'
+        matches1 = re.findall(pattern1, llm_text)
+        
+        # 패턴 2: "N. 빵집이름" 형식
+        pattern2 = r'^\s*\d+\.\s*([^\n:]+?)(?:\n|:|\(|$)'
+        matches2 = re.findall(pattern2, llm_text, re.MULTILINE)
+        
+        # 두 패턴 결과 합치기
+        bakery_names = []
+        for match in matches1:
+            name = match.strip()
+            if name and len(name) < 50:  # 너무 긴 것은 제외
+                bakery_names.append(name)
+        
+        # pattern1에서 충분히 찾았으면 pattern2는 스킵
+        if len(bakery_names) >= 3:
+            logger.info(f"🔍 [PARSE] LLM 응답에서 {len(bakery_names)}개 빵집 이름 파싱 (패턴1)")
+            return bakery_names
+        
+        for match in matches2:
+            name = match.strip()
+            if name and len(name) < 50 and name not in bakery_names:
+                bakery_names.append(name)
+        
+        logger.info(f"🔍 [PARSE] LLM 응답에서 {len(bakery_names)}개 빵집 이름 파싱")
+        for idx, name in enumerate(bakery_names, 1):
+            logger.info(f"  [{idx}] {name}")
+        
+        return bakery_names
+    
+    # LLM 응답에서 빵집 이름 추출
+    parsed_bakery_names = extract_bakery_names_from_llm_response(llm_response or '')
     
     enriched_results = []
     
-    for idx, rag_result in enumerate(rag_results):
-        # RAG 결과에서 빵집 이름 추출
-        bakery_name = rag_result.get('place_name') or rag_result.get('name', '')
-        logger.info(f"🔍 [DEBUG] [{idx+1}] RAG 빵집 이름: {bakery_name}")
+    if parsed_bakery_names:
+        # LLM이 추천한 빵집 이름으로 DB에서 찾기
+        logger.info(f"🔍 [DB_MATCH] LLM이 추천한 {len(parsed_bakery_names)}개 빵집을 DB에서 찾습니다")
         
-        if not bakery_name:
-            logger.warning(f"⚠️ [DEBUG] [{idx+1}] 빵집 이름 없음 - 건너뜀")
-            continue
+        for idx, bakery_name in enumerate(parsed_bakery_names):
+            logger.info(f"🔍 [DB_MATCH] [{idx+1}] 찾는 중: {bakery_name}")
+            
+            # 퍼지 매칭으로 DB에서 빵집 찾기
+            bakery = find_bakery_fuzzy(bakery_name)
+            
+            if bakery:
+                logger.info(f"✅ [DB_MATCH] [{idx+1}] DB 매칭 성공 - ID: {bakery.id}, 이름: {bakery.name}")
+                enriched_results.append({
+                    'id': bakery.id,
+                    'name': bakery.name,
+                    'place_name': bakery.name,
+                    'district': bakery.district,
+                    'address': bakery.road_address or bakery.jibun_address,
+                    'rating': bakery.naver_rate or bakery.kakao_rate,
+                    'phone': bakery.phone,
+                    'url': bakery.url,
+                })
+            else:
+                logger.warning(f"⚠️ [DB_MATCH] [{idx+1}] DB에 없는 빵집: {bakery_name}")
+                # DB에 없으면 이름만 포함
+                enriched_results.append({
+                    'id': None,
+                    'name': bakery_name,
+                    'place_name': bakery_name,
+                    'district': '',
+                    'address': '',
+                    'rating': '',
+                    'phone': '',
+                    'url': '',
+                })
+    else:
+        # LLM 응답 파싱 실패 시 fallback: RAG results 사용
+        logger.warning("⚠️ [PARSE] LLM 응답에서 빵집 이름 파싱 실패 - RAG results로 fallback")
+        rag_results = result.get('results', [])
+        logger.info(f"🍞 [FALLBACK] RAG에서 반환한 빵집 수: {len(rag_results)}")
         
-        # 퍼지 매칭으로 DB에서 빵집 찾기
-        bakery = find_bakery_fuzzy(bakery_name)
-        
-        if bakery:
-            logger.info(f"✅ [DEBUG] [{idx+1}] DB 매칭 성공 - ID: {bakery.id}, 이름: {bakery.name}")
-            # DB 매칭 성공
-            enriched_results.append({
-                'id': bakery.id,
-                'name': bakery.name,
-                'place_name': bakery.name,
-                'district': bakery.district,
-                'address': bakery.road_address or bakery.jibun_address,
-                'rating': bakery.naver_rate or bakery.kakao_rate,
-                'phone': bakery.phone,
-                'url': bakery.url,
-            })
-        else:
-            logger.warning(f"⚠️ [DEBUG] [{idx+1}] DB에 없는 빵집 - RAG 결과 그대로 사용: {bakery_name}")
-            # DB에 없으면 RAG 결과 그대로 사용
-            enriched_results.append({
-                'id': None,  # 명시적으로 None 설정
-                'name': bakery_name,
-                'place_name': bakery_name,
-                'district': rag_result.get('district', ''),
-                'address': rag_result.get('address', ''),
-                'rating': rag_result.get('rating', ''),
-                'phone': rag_result.get('phone', ''),
-                'url': rag_result.get('url', ''),
-            })
+        for idx, rag_result in enumerate(rag_results):
+            bakery_name = rag_result.get('place_name') or rag_result.get('name', '')
+            logger.info(f"🔍 [FALLBACK] [{idx+1}] RAG 빵집 이름: {bakery_name}")
+            
+            if not bakery_name:
+                continue
+            
+            bakery = find_bakery_fuzzy(bakery_name)
+            
+            if bakery:
+                logger.info(f"✅ [FALLBACK] [{idx+1}] DB 매칭 성공 - ID: {bakery.id}")
+                enriched_results.append({
+                    'id': bakery.id,
+                    'name': bakery.name,
+                    'place_name': bakery.name,
+                    'district': bakery.district,
+                    'address': bakery.road_address or bakery.jibun_address,
+                    'rating': bakery.naver_rate or bakery.kakao_rate,
+                    'phone': bakery.phone,
+                    'url': bakery.url,
+                })
+            else:
+                logger.warning(f"⚠️ [FALLBACK] [{idx+1}] DB에 없는 빵집: {bakery_name}")
+                enriched_results.append({
+                    'id': None,
+                    'name': bakery_name,
+                    'place_name': bakery_name,
+                    'district': rag_result.get('district', ''),
+                    'address': rag_result.get('address', ''),
+                    'rating': rag_result.get('rating', ''),
+                    'phone': rag_result.get('phone', ''),
+                    'url': rag_result.get('url', ''),
+                })
 
     logger.info(f"📊 [DEBUG] 최종 enriched_results 개수: {len(enriched_results)}")
 
