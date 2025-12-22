@@ -292,8 +292,17 @@ const submitBakeryComment = async (content) => {
 // 프로필로 이동
 const goToBakeryProfile = (nickname) => {
   console.log('프로필로 이동:', nickname)
-  // TODO: 프로필 페이지 라우팅
-  // router.push({ name: 'profile', params: { nickname } })
+  
+  if (!nickname) {
+    console.warn('닉네임이 없습니다.')
+    return
+  }
+  
+  // 모달 닫기
+  closeBakeryModal()
+  
+  // 다른 사람 프로필 페이지로 라우팅
+  router.push({ name: 'profile-detail', params: { nickname: nickname } })
 }
 </script>
 
