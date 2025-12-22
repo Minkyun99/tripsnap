@@ -144,9 +144,6 @@ def annotate_admin_areas(bakeries: List[Dict[str, Any]]) -> None:
 #  Kakao 로컬 API 호출 (키워드 검색)
 # --------------------------------------------------
 
-
-
-
 def _kakao_keyword_search(query: str) -> Tuple[str, float, float]:
     api_key = KAKAO_REST_API_KEY
     if not api_key:
