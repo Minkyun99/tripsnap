@@ -20,6 +20,7 @@ from allauth.socialaccount.models import SocialAccount
 
 from .forms import CustomUserCreationForm
 from .models import Profile, Post, PostImage, Like, Comment, Social
+from chatbot.models import Bakery
 from .serializers import PostSerializer
 
 User = get_user_model()
@@ -822,3 +823,122 @@ def account_delete_api(request):
         return res
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+    
+@login_required
+def recommended_bakeries_api(request):
+    """
+    GET /users/api/recommended-bakeries/
+
+    - 사용자(User)의 keywords 기반으로 Bakery 추천
+    - 사용자 키워드가 없으면 → 추천 안 함 (빈 리스트)
+    - 키워드는 있으나 매칭되는 빵집이 없으면 → 빈 리스트
+    """
+
+    user = request.user
+
+    # -----------------------------
+    # 1. 사용자 키워드 정규화
+    # -----------------------------
+    raw = getattr(user, "keywords", None)
+
+    user_keywords: list[str] = []
+
+    if isinstance(raw, str):
+        base = raw.strip()
+        if base:
+            base = base.replace(";", ",")
+            user_keywords = [k.strip() for k in base.split(",") if k.strip()]
+
+    elif isinstance(raw, (list, tuple, set)):
+        user_keywords = [str(k).strip() for k in raw if str(k).strip()]
+
+    elif isinstance(raw, dict):
+        if "keywords" in raw and isinstance(raw["keywords"], (list, tuple, set)):
+            user_keywords = [str(k).strip() for k in raw["keywords"] if str(k).strip()]
+        else:
+            user_keywords = [str(k).strip() for k in raw.keys() if str(k).strip()]
+
+    user_kw_set = {k for k in user_keywords if k}
+
+    # -----------------------------
+    # 2. 키워드 없으면 → 바로 빈 리스트 반환
+    # -----------------------------
+    if not user_kw_set:
+        return JsonResponse({"results": []})
+
+    # -----------------------------
+    # 3. Bakery 쿼리셋 준비
+    # -----------------------------
+    qs = Bakery.objects.all()
+
+    # -----------------------------
+    # 4. 키워드 매칭 스코어링
+    # -----------------------------
+    scored: list[tuple[int, Bakery]] = []
+
+    for bakery in qs.only(
+        "id",
+        "name",
+        "district",
+        "road_address",
+        "jibun_address",
+        "url",
+        "keywords",
+    )[:500]:
+        b_raw = bakery.keywords or ""
+
+        if isinstance(b_raw, str):
+            b_keywords = {w.strip() for w in b_raw.replace(";", ",").split(",") if w.strip()}
+        elif isinstance(b_raw, (list, tuple, set)):
+            b_keywords = {str(w).strip() for w in b_raw if str(w).strip()}
+        else:
+            b_keywords = set()
+
+        common = user_kw_set & b_keywords
+        score = len(common)
+
+        if score > 0:
+            scored.append((score, bakery))
+
+    # -----------------------------
+    # 5. 매칭 결과 없으면 → 빈 리스트
+    # -----------------------------
+    if not scored:
+        return JsonResponse({"results": []})
+
+    # 점수 내림차순 정렬
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    # 상위 50개 중 랜덤 최대 6개
+    top_candidates = [b for _, b in scored[:50]]
+    if len(top_candidates) <= 6:
+        selected = top_candidates
+    else:
+        selected = random.sample(top_candidates, 6)
+
+    # -----------------------------
+    # 6. 응답 JSON 생성
+    # -----------------------------
+    results = []
+    for b in selected:
+        b_kw_raw = b.keywords or ""
+        if isinstance(b_kw_raw, str):
+            kw_list = [w.strip() for w in b_kw_raw.replace(";", ",").split(",") if w.strip()]
+        elif isinstance(b_kw_raw, (list, tuple, set)):
+            kw_list = [str(w).strip() for w in b_kw_raw if str(w).strip()]
+        else:
+            kw_list = []
+
+        results.append(
+            {
+                "id": b.id,
+                "name": b.name,
+                "district": b.district,
+                "road_address": b.road_address,
+                "jibun_address": b.jibun_address,
+                "url": b.url,
+                "keywords": kw_list,
+            }
+        )
+
+    return JsonResponse({"results": results})

@@ -1,11 +1,14 @@
 <!-- src/views/HomeView.vue -->
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
+import { useBakeryStore } from '@/stores/bakery'
+import BakeryModal from './BakeryModal.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const bakeryStore = useBakeryStore()
 
 const isAuthenticated = computed(() => userStore.isAuthenticated)
 
@@ -26,6 +29,58 @@ const goChatbot = () => {
 const handleKakaoLogin = () => {
   userStore.startKakaoLogin()
 }
+
+const handleGoProfileFromModal = (nickname) => {
+  // 실제 프로필 상세 라우트 이름/파라미터에 맞게 수정
+  router.push({ name: 'profile-detail', params: { nickname } })
+}
+
+// API 기본 URL
+const API_BASE = import.meta.env.VITE_API_BASE || ''
+
+// 추천 베이커리 목록
+const recommendedBakeries = ref([])
+const isLoadingRecommended = ref(false)
+
+// 카드 클릭 → Pinia store를 통해 모달 오픈 (ID 기준, 상세 재조회)
+const openBakeryModal = async (bakery) => {
+  if (!bakery || !bakery.id) {
+    console.error('추천 베이커리 ID 없음:', bakery)
+    return
+  }
+
+  try {
+    // 위도/경도 포함된 상세 정보를 가져오고, 댓글도 함께 로드
+    await bakeryStore.openModalById(bakery.id, { loadComments: true })
+  } catch (err) {
+    console.error('추천 베이커리 모달 오픈 중 오류:', err)
+  }
+}
+
+// 추천 베이커리 로드
+onMounted(async () => {
+  if (!isAuthenticated.value) return
+
+  isLoadingRecommended.value = true
+  try {
+    const res = await fetch(`${API_BASE}/users/api/recommended-bakeries/`, {
+      credentials: 'include',
+    })
+
+    if (!res.ok) {
+      console.error('추천 빵집 로드 실패:', await res.text())
+      return
+    }
+
+    const data = await res.json()
+    // 백엔드에서 내려주는 구조: { "results": [ ... ] }
+    recommendedBakeries.value = data.results || []
+  } catch (err) {
+    console.error('추천 빵집 로드 중 오류:', err)
+  } finally {
+    isLoadingRecommended.value = false
+  }
+})
 </script>
 
 <template>
@@ -37,14 +92,24 @@ const handleKakaoLogin = () => {
 
         <h2 class="home-title">맛있는 빵집 여행을 시작하세요!</h2>
 
-        <p class="home-subtitle">{{ displayName }}님의 취향에 맞는 빵집을 추천합니다</p>
+        <p class="home-subtitle">
+          {{ displayName }}님의 취향에 맞는 빵집을 추천합니다
+        </p>
 
         <div class="home-actions">
-          <button type="button" class="home-btn-profile pixel-corners" @click="goProfile">
+          <button
+            type="button"
+            class="home-btn-profile pixel-corners"
+            @click="goProfile"
+          >
             내 프로필 보기
           </button>
 
-          <button type="button" class="home-btn-chat pixel-corners" @click="goChatbot">
+          <button
+            type="button"
+            class="home-btn-chat pixel-corners"
+            @click="goChatbot"
+          >
             챗봇 대화
           </button>
         </div>
@@ -58,7 +123,11 @@ const handleKakaoLogin = () => {
 
         <p class="home-subtitle">카카오 계정으로 간편하게 로그인</p>
 
-        <button type="button" class="home-btn-kakao pixel-corners" @click="handleKakaoLogin">
+        <button
+          type="button"
+          class="home-btn-kakao pixel-corners"
+          @click="handleKakaoLogin"
+        >
           카카오로 3초 로그인
         </button>
 
@@ -82,7 +151,59 @@ const handleKakaoLogin = () => {
           </div>
         </div>
       </div>
+
+      <!-- 추천 빵집 섹션 -->
+      <section
+        v-if="isAuthenticated && recommendedBakeries.length"
+        class="home-reco"
+      >
+        <h2 class="home-reco-title">이런 빵집은 어떤가요?</h2>
+
+        <div class="home-reco-list">
+          <article
+            v-for="b in recommendedBakeries"
+            :key="b.id"
+            class="home-reco-card"
+            @click="openBakeryModal(b)"
+          >
+            <h3 class="home-reco-name">{{ b.name }}</h3>
+            <p class="home-reco-meta">
+              {{ b.district }} · {{ b.road_address }}
+            </p>
+            <p class="home-reco-rating">
+              <span v-if="b.kakao_rate">⭐ 카카오 {{ b.kakao_rate }}</span>
+              <span v-if="b.naver_rate">
+                <span v-if="b.kakao_rate"> / </span>⭐ 네이버 {{ b.naver_rate }}
+              </span>
+            </p>
+            <p
+              v-if="b.keywords && (Array.isArray(b.keywords) ? b.keywords.length : true)"
+              class="home-reco-keywords"
+            >
+              {{
+                Array.isArray(b.keywords)
+                  ? b.keywords.join(', ')
+                  : b.keywords
+              }}
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- 로그인은 했지만 추천 없음 (예: 빵집 데이터가 아예 없거나 에러) -->
+      <section
+        v-else-if="isAuthenticated && !isLoadingRecommended"
+        class="home-reco home-reco-empty"
+      >
+        <h2 class="home-reco-title">이런 빵집은 어떤가요?</h2>
+        <p class="home-reco-desc">
+          아직 추천할 빵집이 없어요. 먼저 빵집 관련 게시글을 올려서 취향을 알려주세요!
+        </p>
+      </section>
     </div>
+
+    <!-- 공용 베이커리 모달 (Pinia 기반) -->
+    <BakeryModal @go-profile="handleGoProfileFromModal" />
   </div>
 </template>
 
@@ -244,6 +365,72 @@ $ts-text-brown: #8b4513;
 /* 반응형: md 이상에서 3열 */
 @media (min-width: 768px) {
   .home-features {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.home-reco {
+  margin-top: 3rem;
+  padding: 2rem 1.5rem;
+  background-color: #fff7f0;
+  border-radius: 1.5rem;
+  border: 1px solid $ts-border-brown;
+}
+
+.home-reco-title {
+  margin: 0 0 1.25rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: $ts-text-brown;
+}
+
+.home-reco-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.home-reco-card {
+  padding: 1rem 1.2rem;
+  border-radius: 1rem;
+  background-color: #ffffff;
+  border: 1px solid $ts-border-brown;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.home-reco-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+}
+
+.home-reco-name {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.home-reco-meta,
+.home-reco-rating,
+.home-reco-keywords {
+  margin: 0.1rem 0;
+  font-size: 0.85rem;
+  color: $ts-text-brown;
+}
+
+.home-reco-empty {
+  text-align: center;
+}
+
+.home-reco-desc {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  color: $ts-text-brown;
+}
+
+@media (min-width: 768px) {
+  .home-reco-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

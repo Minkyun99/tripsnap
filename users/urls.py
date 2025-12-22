@@ -62,5 +62,9 @@ urlpatterns = [
     # 기존 템플릿/폼 기반 탈퇴 (유지)
     path('delete/', views.account_delete, name='account_delete'),
 
+    
+   # ✅ 추천 빵집 API (HomeView.vue에서 사용)
+    path('api/recommended-bakeries/', views.recommended_bakeries_api, name='recommended_bakeries_api'),
+
 
 ]
