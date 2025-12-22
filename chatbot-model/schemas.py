@@ -5,6 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, time
 from typing import Optional, Literal
+from enum import Enum
+
+class TransportMode(str, Enum):
+    WALK = "walk"
+    SUBWAY = "subway"
+    BUS = "bus"
+    TRANSIT_MIXED = "transit_mixed"
+    CAR = "car"  # 이미 자차 로직이 있다면 그대로 사용
+
 
 
 @dataclass

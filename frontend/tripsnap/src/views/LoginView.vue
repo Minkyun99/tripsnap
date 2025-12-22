@@ -1,6 +1,6 @@
 <!-- src/views/LoginView.vue -->
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
 
@@ -11,14 +11,38 @@ const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
 
+// 이메일 인풋 포커스를 위한 ref
+const emailInput = ref(null)
+
 const handleSubmit = async () => {
   errorMessage.value = ''
-  try {
-    await userStore.login({ email: email.value, password: password.value })
-    router.push('/')
-  } catch (e) {
-    errorMessage.value = userStore.error || '로그인에 실패했습니다.'
+
+  // 선택: 빈 값 방어
+  if (!email.value || !password.value) {
+    errorMessage.value = '이메일과 비밀번호를 모두 입력해주세요.'
+    return
   }
+
+  const ok = await userStore.login({ email: email.value, password: password.value })
+
+  // ✅ 로그인 실패: 페이지 유지 + 경고문구 + 입력값 초기화
+  if (!ok) {
+    errorMessage.value = userStore.error || '아이디 또는 비밀번호가 올바르지 않습니다.'
+
+    // 입력값 초기화
+    email.value = ''
+    password.value = ''
+
+    // 이메일 인풋에 포커스
+    await nextTick()
+    if (emailInput.value) {
+      emailInput.value.focus()
+    }
+    return
+  }
+
+  // ✅ 로그인 성공 시 메인으로 이동
+  router.push('/')
 }
 
 const handleKakaoLogin = () => {
@@ -57,7 +81,14 @@ const handleKakaoLogin = () => {
 
         <div class="field">
           <label for="email">이메일</label>
-          <input id="email" v-model="email" type="email" autocomplete="email" required />
+          <input
+            id="email"
+            ref="emailInput"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            required
+          />
         </div>
 
         <div class="field">

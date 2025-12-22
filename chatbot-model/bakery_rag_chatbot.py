@@ -1,26 +1,32 @@
-# bakery_rag_chatbot.py
-
 import json
 import os
-from datetime import datetime
+import math
+from datetime import datetime, time
 from typing import Any, Dict, List, Tuple, Optional
 
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
-from schemas import DateTimeConstraint, LocationFilter
+from schemas import DateTimeConstraint, LocationFilter, TransportMode
+
 from location_module import (
     annotate_admin_areas,
     extract_location_from_query,
     filter_bakeries_by_location,
+    detect_transport_mode,
     haversine,
+    find_nearest_subway_station,
+    build_kakao_place_url,
+    build_kakao_route_url,
 )
+
 from time_module import (
     build_business_hours_index,
     is_available_in_period,
     is_open_at,
     parse_date_time_from_query,
     KOREAN_WEEKDAY_MAP,
+    DateTimeParser,
 )
 from ranking_module import (
     build_review_stats_cache,
@@ -28,13 +34,80 @@ from ranking_module import (
     detect_flagship_tour_intent,
     extract_menu_keywords,
     generate_search_queries,
+    rank_bakeries,
 )
-from ranking_utils import rank_bakeries
+from ranking_utils import (
+    haversine_distance_km,
+    estimate_walk_time_minutes,
+    estimate_transit_time_minutes,
+)
 
 try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
+
+try:
+    import requests
+except ImportError:
+    requests = None
+
+# ==================================================
+#  대전 1호선 역 순서 (동선 최적화용 메타데이터)
+# ==================================================
+
+SUBWAY_LINE1_SEQUENCE = [
+    "판암",
+    "신흥",
+    "대동",
+    "대전",
+    "중앙로",
+    "중구청",
+    "서대전네거리",
+    "오룡",
+    "용문",
+    "탄방",
+    "시청",
+    "정부청사",
+    "갈마",
+    "월평",
+    "갑천",
+    "유성온천",
+    "구암",
+    "현충원",
+    "월드컵경기장",
+    "노은",
+    "지족",
+    "반석",
+]
+
+SUBWAY_LINE1_INDEX = {name: idx for idx, name in enumerate(SUBWAY_LINE1_SEQUENCE)}
+
+
+def _normalize_station_name_for_line(name: str) -> str:
+    if not name:
+        return ""
+    return name.split("(")[0].strip()
+
+
+def get_subway_station_order_index(station_name: str) -> int:
+    base = _normalize_station_name_for_line(station_name)
+    return SUBWAY_LINE1_INDEX.get(base, -1)
+
+
+def infer_line_direction(visited_stations):
+    indices = [
+        get_subway_station_order_index(s)
+        for s in visited_stations
+        if get_subway_station_order_index(s) >= 0
+    ]
+    if len(indices) < 2:
+        return 0
+    if indices[-1] > indices[0]:
+        return 1
+    if indices[-1] < indices[0]:
+        return -1
+    return 0
 
 
 class BakeryExpertRAG:
@@ -51,6 +124,16 @@ class BakeryExpertRAG:
         self.dessert_path = dessert_path
         self.base_keywords_path = base_keywords_path
         self.vectordb_path = vectordb_path
+
+        # ---------- Kakao Mobility Navi API 키 ----------
+        self.kakao_mobility_api_key = (
+            os.getenv("KAKAO_MOBILITY_API_KEY", "d58a0c90acfbefb8a0a651c62c6fbd4c")
+            or os.getenv("KAKAO_REST_API_KEY", "d58a0c90acfbefb8a0a651c62c6fbd4c")
+        )
+        if self.kakao_mobility_api_key and requests is not None:
+            print("🚗 Kakao Mobility Navi API 키 감지 – 실제 도로 기준 이동거리/시간을 사용합니다.")
+        else:
+            print("⚠️ Kakao Mobility Navi API 미사용 – 직선거리 기반 이동시간 추정만 사용합니다.")
 
         # ---------- 데이터 로드 ----------
         with open(self.dessert_path, "r", encoding="utf-8") as f:
@@ -138,13 +221,19 @@ class BakeryExpertRAG:
         else:
             print("⚠️ UPSTAGE_API_KEY 미설정 또는 openai 패키지 미설치로 LLM 재랭킹 비활성화")
 
+        # 시간/날짜 파서
+        self.time_parser = DateTimeParser()
+
+        # 빵 구매 평균 체류 시간(분)
+        self.avg_purchase_minutes: float = 15.0
+
+        # 도보 코스 최대 이동시간(분) – “도보 20분 룰”
+        self.MAX_WALK_MINUTES: float = 20.0
+
         print("✅ 시스템 초기화 완료!\n")
 
         # 플래그십/유명 리스트 (현재 미사용)
         self.known_flagship_names: List[str] = []
-
-        # 빵 구매에 걸리는 평균 시간 (분) – 코스 타임라인 계산용
-        self.avg_purchase_minutes: float = 15.0
 
     # ==============================
     #  벡터 검색
@@ -155,10 +244,6 @@ class BakeryExpertRAG:
         queries: List[str],
         top_k: int = 60,
     ) -> List[Dict[str, Any]]:
-        """
-        bakery_collection에서 여러 쿼리로 검색한 뒤,
-        slug_en 기준으로 union한 후보 집합을 만든다.
-        """
         if self.bakery_collection is None:
             return list(self.bakeries)
 
@@ -211,9 +296,6 @@ class BakeryExpertRAG:
         ranked: List[Tuple[Dict[str, Any], float]],
         max_items: int = 10,
     ) -> List[Tuple[Dict[str, Any], float]]:
-        """
-        Upstage solar-mini-250422로 상위 후보를 한 번 더 재정렬한다.
-        """
         if self.llm_client is None:
             return ranked
         if not ranked:
@@ -232,8 +314,7 @@ class BakeryExpertRAG:
                 f"{idx}. 이름: {name}, 지역: {district}, 평점: {rating}, 대표 키워드: {', '.join(final_kw[:8])}"
             )
 
-        system_prompt = (
-            """
+        system_prompt = """
             당신은 '빵집 추천 전문가'이자 30년 경력의 제과·제빵 전문가입니다.
 
             당신에게는 다음과 같은 입력이 주어집니다.
@@ -250,7 +331,6 @@ class BakeryExpertRAG:
             존재하지 않는 매장을 새로 만들지 말고, 항상 candidates 안에서만 선택/재배치 하십시오.
             한국어로 자연스럽게, 전문적인 어조로 응답하되, 여기서는 순서만 반환합니다.
         """
-        )
 
         user_prompt = (
             f"질문: {user_query}\n\n"
@@ -298,7 +378,7 @@ class BakeryExpertRAG:
             if i not in added:
                 new_top.append(idx_to_item[i])
 
-        tail = ranked[len(top_slice) :]
+        tail = ranked[len(top_slice):]
         return new_top + tail
 
     # ==============================
@@ -306,10 +386,6 @@ class BakeryExpertRAG:
     # ==============================
 
     def _infer_travel_mode(self, query: str) -> str:
-        """
-        질의에서 이동 수단(도보/대중교통/자차)을 단순 추론.
-        기본값은 '대중교통(transit)'.
-        """
         q = query.lower()
 
         if any(k in query for k in ["도보", "걸어서", "걷기", "걷고"]):
@@ -330,14 +406,13 @@ class BakeryExpertRAG:
 
     def _max_leg_distance_km(self, travel_mode: str) -> float:
         """
-        이동 수단별 최대 이동 시간 제약을 km로 변환.
-        - 도보: 20분, 4km/h → 약 1.3km
-        - 대중교통: 30분, 20km/h → 약 10km
-        - 자차: 30분, 30km/h → 약 15km
+        한 구간(매장→다음 매장)당 허용하는 최대 거리(km).
+        - walk: 도보 20분 룰을 보수적으로 반영 (약 3km/h 기준 → 1.0km)
+        - car / transit: 상대적으로 여유 있게 설정
         """
         if travel_mode == "walk":
-            speed_kmh = 4.0
-            max_min = 20
+            speed_kmh = 3.0
+            max_min = self.MAX_WALK_MINUTES
         elif travel_mode == "car":
             speed_kmh = 30.0
             max_min = 30
@@ -357,19 +432,63 @@ class BakeryExpertRAG:
             speed_kmh = 20.0
         return dist_km / speed_kmh * 60.0
 
+    def _prune_far_same_station_bakeries(
+        self,
+        items: List[Dict[str, Any]],
+        max_walk_min: float = 25.0,
+    ) -> List[Dict[str, Any]]:
+        from collections import defaultdict
+
+        station_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for it in items:
+            sname = it.get("station_name")
+            if not sname:
+                continue
+            station_groups[sname].append(it)
+
+        kept: List[Dict[str, Any]] = [it for it in items if not it.get("station_name")]
+
+        for station_name, group in station_groups.items():
+            if len(group) <= 1:
+                kept.extend(group)
+                continue
+
+            sorted_group = sorted(
+                group,
+                key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
+                reverse=True,
+            )
+            anchor = sorted_group[0]
+            kept.append(anchor)
+
+            a_coord = anchor.get("coord")
+            if not a_coord:
+                kept.extend(sorted_group[1:])
+                continue
+
+            ax, ay = a_coord
+
+            for it in sorted_group[1:]:
+                coord = it.get("coord")
+                if not coord:
+                    kept.append(it)
+                    continue
+
+                bx, by = coord
+                dist_km = haversine_distance_km(ax, ay, bx, by)
+                walk_min = estimate_walk_time_minutes(dist_km)
+
+                if walk_min <= max_walk_min:
+                    kept.append(it)
+
+        return kept
+
     def _has_now_intent(self, query: str) -> bool:
-        """
-        '지금', '바로', '당장' 등의 표현이 있어
-        '현재 시점 기준으로 가기 좋은 빵집' 의도로 보이는지 판별.
-        """
         text = query.replace(" ", "")
         keywords = ["지금", "바로", "당장", "지금바로", "바로가", "지금갈", "지금당장", "현재"]
         return any(k in text for k in keywords)
 
     def _mode_label(self, travel_mode: str) -> str:
-        """
-        이동 수단 코드 → 한국어 라벨
-        """
         return {
             "walk": "도보",
             "transit": "대중교통",
@@ -377,38 +496,87 @@ class BakeryExpertRAG:
         }.get(travel_mode, "대중교통")
 
     def _get_leg_display_mode(self, dist_km: float, travel_mode: str) -> str:
-        """
-        한 구간(leg)의 실제 이동 모드 결정.
-
-        - 사용자가 '대중교통' 또는 '자차'를 선택했더라도,
-          직선거리 기준 도보 20분(약 1.3km) 이내면 'walk'로 간주해서
-          도보 이동으로 안내한다.
-        - 그 외에는 사용자가 선택한 모드를 그대로 쓴다.
-        """
-        walk_threshold = self._max_leg_distance_km("walk")  # 1.3km (도보 20분 기준)
-
+        walk_threshold = self._max_leg_distance_km("walk")
         if travel_mode in ("transit", "car") and dist_km <= walk_threshold:
             return "walk"
         return travel_mode
 
     # ==============================
-    #  대기시간/오픈시간 헬퍼 (주말/공휴일/리뷰수 가중)
+    #  Kakao Mobility 길찾기 연동
+    # ==============================
+
+    def _call_kakao_mobility_route(
+        self,
+        start_lat: float,
+        start_lon: float,
+        end_lat: float,
+        end_lon: float,
+    ) -> Optional[Tuple[float, float]]:
+        if not self.kakao_mobility_api_key or requests is None:
+            return None
+        try:
+            url = "https://apis-navi.kakaomobility.com/v1/directions"
+            headers = {
+                "Authorization": f"KakaoAK {self.kakao_mobility_api_key}",
+                "Content-Type": "application/json",
+            }
+            params = {
+                "origin": f"{start_lon},{start_lat}",
+                "destination": f"{end_lon},{end_lat}",
+                "priority": "RECOMMEND",
+            }
+            resp = requests.get(url, headers=headers, params=params, timeout=3)
+            if resp.status_code != 200:
+                print(f"⚠️ Kakao Mobility API 응답 코드: {resp.status_code}")
+                return None
+            data = resp.json()
+            routes = data.get("routes")
+            if not routes:
+                return None
+            summary = routes[0].get("summary", {})
+            distance_m = float(summary.get("distance", 0.0))
+            duration_s = float(summary.get("duration", 0.0))
+            if distance_m <= 0:
+                return None
+            distance_km = distance_m / 1000.0
+            duration_min = duration_s / 60.0 if duration_s > 0 else 0.0
+            return distance_km, duration_min
+        except Exception as e:
+            print(f"⚠️ Kakao Mobility directions 호출 실패: {e}")
+            return None
+
+    def _get_leg_distance_and_durations(
+        self,
+        start_lat: float,
+        start_lon: float,
+        end_lat: float,
+        end_lon: float,
+    ) -> Tuple[float, float, float]:
+        kakao_result = self._call_kakao_mobility_route(start_lat, start_lon, end_lat, end_lon)
+        if kakao_result is not None:
+            distance_km, car_min = kakao_result
+            walk_min = distance_km / 3.3 * 60.0 if distance_km > 0 else 0.0
+        else:
+            distance_km = haversine_distance_km(start_lat, start_lon, end_lat, end_lon)
+            walk_min = estimate_walk_time_minutes(distance_km)
+            car_min = estimate_transit_time_minutes(distance_km, TransportMode.CAR)
+
+        return distance_km, walk_min, car_min
+
+    # ==============================
+    #  대기시간/오픈시간 헬퍼
     # ==============================
 
     def _is_public_holiday(self, date_obj) -> bool:
-        """
-        간단한 양력 공휴일만 반영.
-        (설/추석 등 음력 공휴일은 여기에서 제외)
-        """
         fixed_holidays = {
-            (1, 1),   # 신정
-            (3, 1),   # 3.1절
-            (5, 5),   # 어린이날
-            (6, 6),   # 현충일
-            (8, 15),  # 광복절
-            (10, 3),  # 개천절
-            (10, 9),  # 한글날
-            (12, 25), # 크리스마스
+            (1, 1),
+            (3, 1),
+            (5, 5),
+            (6, 6),
+            (8, 15),
+            (10, 3),
+            (10, 9),
+            (12, 25),
         }
         return (date_obj.month, date_obj.day) in fixed_holidays
 
@@ -417,31 +585,16 @@ class BakeryExpertRAG:
         bakery: Dict[str, Any],
         constraint: DateTimeConstraint,
     ) -> float:
-        """
-        dessert_en.json의 waiting_prediction을 사용해
-        평균 예상 대기시간(분)을 추정한 뒤,
-        - 주말(토/일)에는 약 20% 가중
-        - 공휴일(크리스마스 포함)에는 추가로 약 30% 가중
-        - 리뷰 수가 많을수록 (500/1000/2000건 이상) 약간씩 추가 가중
-        을 적용한다.
-
-        단, waiting_prediction 에서 어떤 형태로든 평균 대기시간을
-        얻지 못하는 경우(=0분인 경우)에는 가중을 적용하지 않는다.
-        """
         wp = bakery.get("waiting_prediction") or {}
         preds = wp.get("predictions") or {}
         overall = wp.get("overall_stats") or {}
 
-        name = bakery.get("name") or bakery.get("slug_en") or ""
-
         ref_date: Optional[datetime.date] = None
         ref_time: Optional[datetime.time] = None
 
-        # 실제 날짜/시간 정보가 있는 경우
         if constraint.has_date_range and constraint.start_date:
             ref_date = constraint.start_date
             ref_time = constraint.start_time or constraint.end_time
-        # '지금/바로' 기반 질의인 경우 – 오늘 날짜/시간 기준
         elif constraint.use_now_if_missing:
             now = datetime.now()
             ref_date = now.date()
@@ -462,7 +615,6 @@ class BakeryExpertRAG:
 
         base_wait: float = 0.0
 
-        # 1) 가능한 경우: 요일 + 시간대별 예측
         if weekday_name and weekday_name in preds:
             day_pred = preds[weekday_name] or {}
             by_time = day_pred.get("by_time") or {}
@@ -473,35 +625,31 @@ class BakeryExpertRAG:
                         base_wait = float(band["predicted_wait_minutes"])
                     except Exception:
                         base_wait = 0.0
-            # 요일 전체 예측
             if base_wait <= 0 and "predicted_wait_minutes" in day_pred:
                 try:
                     base_wait = float(day_pred["predicted_wait_minutes"])
                 except Exception:
                     base_wait = 0.0
 
-        # 2) overall 평균
         if base_wait <= 0 and "average_minutes" in overall:
             try:
                 base_wait = float(overall["average_minutes"])
             except Exception:
                 base_wait = 0.0
 
-        # 대기시간 정보를 전혀 얻지 못한 경우, 가중치 없이 0으로 반환
         if base_wait <= 0:
             return 0.0
 
         factor = 1.0
 
-        # (1) 주말/공휴일 가중 – 실제 날짜 정보가 있는 경우에만
         if ref_date is not None:
-            weekday_idx = ref_date.weekday()  # 0=월, 5=토, 6=일
-            if weekday_idx >= 5:   # 토/일
+            weekday_idx = ref_date.weekday()
+            if weekday_idx >= 5:
                 factor *= 1.2
             if self._is_public_holiday(ref_date):
                 factor *= 1.3
 
-        # (2) 리뷰 수가 많을수록 인기 매장으로 보고 추가 가중
+        name = bakery.get("name") or bakery.get("slug_en") or ""
         total_reviews, _ = self.review_stats_cache.get(name, (0, {}))
         if total_reviews >= 2000:
             factor *= 1.3
@@ -513,10 +661,6 @@ class BakeryExpertRAG:
         return base_wait * factor
 
     def _get_earliest_open_minutes(self, bakery: Dict[str, Any]) -> Optional[int]:
-        """
-        business_hours_index 에서 '가장 이른 오픈 시간'을 분 단위로 추출.
-        (날짜 정보가 없이, 하루 코스를 짤 때 사용)
-        """
         name = bakery.get("name") or bakery.get("slug_en") or ""
         if not name:
             return None
@@ -538,597 +682,949 @@ class BakeryExpertRAG:
 
         return earliest
 
+    def _infer_start_minutes(
+        self,
+        constraint: DateTimeConstraint,
+    ) -> Tuple[int, str]:
+        if constraint.has_date_range and constraint.start_time is not None:
+            h = constraint.start_time.hour
+            m = constraint.start_time.minute
+            return h * 60 + m, constraint.start_time.strftime("%H:%M")
+
+        if constraint.use_now_if_missing:
+            now = datetime.now()
+            return now.hour * 60 + now.minute, f"현재 시각({now.strftime('%H:%M')})"
+
+        return 11 * 60, "오전 11:00"
+
+    def _format_minutes_to_hhmm(self, minutes: int) -> str:
+        minutes = minutes % (24 * 60)
+        h = minutes // 60
+        m = minutes % 60
+        return f"{h:02d}:{m:02d}"
+
     # ==============================
-    #  동선 최적화 (타임라인 반영)
+    #  동선 최적화 (지하철 노선 기반 + 일반 거리 기반)
     # ==============================
 
     def _order_bakeries_by_route(
         self,
-        ranked: List[Tuple[Dict[str, Any], float]],
-        loc_filter: LocationFilter,
+        ranked: List[Any],
+        loc_filter: Optional[LocationFilter],
         travel_mode: str,
         constraint: DateTimeConstraint,
+        menu_keywords: List[str],
     ) -> List[Tuple[Dict[str, Any], float]]:
-        """
-        1차 랭킹된 리스트를 이동 동선/이동시간/대기시간/오픈시간을 고려해 순서 재구성.
+        # 0) 입력 정규화
+        norm_ranked: List[Tuple[Dict[str, Any], float]] = []
 
-        - '지금/바로' 등 현재 시점 기반 질문:
-            → 단순히 구간별 이동시간 + (대략적인) 평균 웨이팅 최소가 되도록 Greedy
-        - 날짜/시간이 전혀 없고, '지금' 언급도 없는 일반 질문:
-            → 각 매장의 '가장 이른 오픈 시간'을 기준으로
-              하루 코스를 짤 때 사용
-        """
-        if not ranked:
-            return ranked
+        for item in ranked:
+            bakery = None
+            score = 0.0
 
-        max_leg_km = self._max_leg_distance_km(travel_mode)
+            if isinstance(item, dict):
+                if isinstance(item.get("bakery"), dict):
+                    bakery = item["bakery"]
+                    score = float(item.get("score", 0.0) or 0.0)
+                else:
+                    bakery = item
+                    score = float(item.get("score", 0.0) or 0.0)
+            elif isinstance(item, (tuple, list)):
+                if len(item) >= 1 and isinstance(item[0], dict):
+                    bakery = item[0]
+                    if len(item) >= 2:
+                        try:
+                            score = float(item[1])
+                        except Exception:
+                            score = 0.0
 
-        def _get_coord(b: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+            if isinstance(bakery, dict):
+                norm_ranked.append((bakery, score))
+
+        if len(norm_ranked) <= 1:
+            return norm_ranked
+
+        # 출발 시각
+        start_minutes, _ = self._infer_start_minutes(constraint)
+
+        # 1) 공통 아이템 구조 구성
+        items: List[Dict[str, Any]] = []
+        for idx, (bakery, score) in enumerate(norm_ranked):
+            # 좌표
+            lat = None
+            lon = None
             try:
-                lat = float(b.get("latitude", 0) or 0)
-                lon = float(b.get("longitude", 0) or 0)
+                lat = float(bakery.get("latitude") or 0)
+                lon = float(bakery.get("longitude") or 0)
+                if lat == 0 or lon == 0:
+                    lat, lon = None, None
             except Exception:
-                return None
-            if lat == 0 and lon == 0:
-                return None
-            return lat, lon
+                lat, lon = None, None
+            coord = (lat, lon) if (lat is not None and lon is not None) else None
 
-        items = []
-        for idx, (b, score) in enumerate(ranked):
+            # 가까운 지하철역
+            station_name = None
+            station_index = -1
+            if coord is not None:
+                try:
+                    s_name, s_lat, s_lon = find_nearest_subway_station(coord[0], coord[1])
+                    station_name = _normalize_station_name_for_line(s_name) if s_name else None
+                    if station_name:
+                        station_index = get_subway_station_order_index(station_name)
+                except Exception:
+                    station_name = None
+                    station_index = -1
+
+            # 대기시간 / 오픈시간 기반 route_score
+            try:
+                wait_min = self._get_expected_wait_minutes(bakery, constraint)
+            except Exception:
+                wait_min = 0.0
+
+            open_min = self._get_earliest_open_minutes(bakery)
+
+            base_score = float(score or 0.0)
+            route_score = base_score
+
+            # 대기시간이 긴 매장은 앞쪽에
+            if wait_min and wait_min > 0:
+                route_score += min(wait_min, 30.0) * 0.2
+
+            # 너무 늦게 여는 매장은 패널티
+            if open_min is not None:
+                delta = open_min - start_minutes
+                if delta > 180:
+                    if delta > 300:
+                        route_score -= 1.5
+                    else:
+                        route_score -= 1.0
+
             items.append(
                 {
-                    "bakery": b,
-                    "score": score,
-                    "coord": _get_coord(b),
+                    "bakery": bakery,
+                    "score": base_score,
+                    "route_score": route_score,
+                    "coord": coord,
+                    "station_name": station_name,
+                    "station_index": station_index,
+                    "wait_minutes": float(wait_min or 0.0),
+                    "open_minutes": open_min,
                     "orig_idx": idx,
-                    "earliest_open_min": self._get_earliest_open_minutes(b),
                 }
             )
 
-        # 현재 시점 기반 질의인지 여부
-        is_now_mode = constraint.use_now_if_missing
+        if len(items) <= 1:
+            return norm_ranked
 
-        # 타임라인 모드:
-        # - 날짜 범위 없음
-        # - 시작/종료 시간 없음
-        # - use_now_if_missing=False (→ '지금' 의도가 아님)
-        is_timeline_mode = (
-            not constraint.has_date_range
-            and constraint.start_time is None
-            and constraint.end_time is None
-            and not constraint.use_now_if_missing
-        )
-
-        # 출발 기준 좌표 (point 기반 위치 필터일 때)
+        # 출발 위치
         origin_coord: Optional[Tuple[float, float]] = None
-        if (
-            isinstance(loc_filter, LocationFilter)
-            and loc_filter.kind == "point"
-            and loc_filter.lat is not None
-            and loc_filter.lon is not None
-        ):
-            origin_coord = (loc_filter.lat, loc_filter.lon)
+        if loc_filter is not None:
+            lat = getattr(loc_filter, "lat", None)
+            lon = getattr(loc_filter, "lon", None)
+            kind = getattr(loc_filter, "kind", None)
+            if kind == "point" and lat is not None and lon is not None:
+                origin_coord = (lat, lon)
 
-        # ---------- 시작 매장 선택 ----------
-        start_item: Optional[Dict[str, Any]] = None
+        # 2) 지하철 모드: 기존 역 순서 기반 로직 유지
+        if travel_mode == "transit":
+            station_clusters: Dict[int, List[Dict[str, Any]]] = {}
+            no_station_items: List[Dict[str, Any]] = []
 
-        if is_timeline_mode:
-            # 하루 코스: "가장 이른 오픈 시간"을 가진 매장을 출발점으로
-            best_item = None
-            best_open = None
             for it in items:
-                eo = it["earliest_open_min"]
-                if eo is None:
-                    continue
-                if best_open is None or eo < best_open:
-                    best_open = eo
-                    best_item = it
-            start_item = best_item
+                s_idx = it.get("station_index", -1)
+                if isinstance(s_idx, int) and s_idx >= 0:
+                    station_clusters.setdefault(s_idx, []).append(it)
+                else:
+                    no_station_items.append(it)
 
-        if start_item is None:
-            # 일반 모드: 출발지가 있으면 "가까운" 매장 선택, 없으면 그냥 1등
-            if origin_coord is not None:
-                best = None
-                best_dist = float("inf")
-                for it in items:
-                    if it["coord"] is None:
+            if not station_clusters:
+                return self._order_bakeries_by_route_distance(items, origin_coord, travel_mode)
+
+            for s_idx, bucket in station_clusters.items():
+                bucket.sort(
+                    key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
+                    reverse=True,
+                )
+
+            all_station_indices = sorted(station_clusters.keys())
+
+            def choose_start_station_index() -> int:
+                nonlocal origin_coord
+                if origin_coord is not None:
+                    best_idx = None
+                    best_dist = None
+                    for s_idx, bucket in station_clusters.items():
+                        rep_coord = None
+                        for it in bucket:
+                            if it.get("coord") is not None:
+                                rep_coord = it["coord"]
+                                break
+                        if rep_coord is None:
+                            continue
+                        d = haversine_distance_km(
+                            origin_coord[0], origin_coord[1],
+                            rep_coord[0], rep_coord[1],
+                        )
+                        if best_dist is None or d < best_dist:
+                            best_dist = d
+                            best_idx = s_idx
+                    if best_idx is not None:
+                        return best_idx
+
+                best_idx = None
+                best_score = None
+                for s_idx, bucket in station_clusters.items():
+                    top_score = bucket[0].get("route_score") or bucket[0].get("score") or 0.0
+                    if best_score is None or top_score > best_score:
+                        best_score = top_score
+                        best_idx = s_idx
+                return int(best_idx if best_idx is not None else all_station_indices[0])
+
+            start_station_idx = choose_start_station_index()
+
+            left_indices = sorted(
+                [i for i in all_station_indices if i < start_station_idx],
+                reverse=True,
+            )
+            right_indices = sorted(
+                [i for i in all_station_indices if i > start_station_idx]
+            )
+
+            pattern1_indices = [start_station_idx] + right_indices + left_indices
+            pattern2_indices = [start_station_idx] + left_indices + right_indices
+
+            def build_route(pattern_indices: List[int]) -> List[Dict[str, Any]]:
+                route_items: List[Dict[str, Any]] = []
+                for s_idx in pattern_indices:
+                    bucket = station_clusters.get(s_idx, [])
+                    for it in bucket:
+                        route_items.append(it)
+                return route_items
+
+            route1_items = build_route(pattern1_indices)
+            route2_items = build_route(pattern2_indices)
+
+            def route_cost_by_station_index(route_items: List[Dict[str, Any]]) -> float:
+                total = 0.0
+                last_idx_local: Optional[int] = None
+                for it in route_items:
+                    s_idx = it.get("station_index", -1)
+                    if not isinstance(s_idx, int) or s_idx < 0:
                         continue
-                    dist = haversine(
-                        origin_coord[0],
-                        origin_coord[1],
-                        it["coord"][0],
-                        it["coord"][1],
-                    )
-                    if dist < best_dist:
-                        best = it
-                        best_dist = dist
-                start_item = best
+                    if last_idx_local is not None:
+                        total += abs(s_idx - last_idx_local)
+                    last_idx_local = s_idx
+                return total
+
+            cost1 = route_cost_by_station_index(route1_items)
+            cost2 = route_cost_by_station_index(route2_items)
+
+            if cost1 <= cost2:
+                chosen_route_items = route1_items
             else:
-                for it in items:
-                    if it["coord"] is not None:
-                        start_item = it
-                        break
+                chosen_route_items = route2_items
 
-        if start_item is None:
-            # 좌표 정보 거의 없으면 경로 최적화 불가 → 기존 순서 유지
-            return ranked
+            no_station_items_sorted = sorted(
+                no_station_items,
+                key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
+                reverse=True,
+            )
 
-        route: List[Dict[str, Any]] = []
+            final_items = chosen_route_items + no_station_items_sorted
+            return [(it["bakery"], it["score"]) for it in final_items]
+
+        # 3) 그 외 모드: 거리 + 인기도(route_score) 가중 그리디
+        return self._order_bakeries_by_route_distance(items, origin_coord, travel_mode)
+
+    # --------------------------------------------------
+    #  거리 기반 그리디 경로 (walk / car / 일반 fallback용)
+    # --------------------------------------------------
+    def _order_bakeries_by_route_distance(
+        self,
+        items: List[Dict[str, Any]],
+        origin_coord: Optional[Tuple[float, float]],
+        travel_mode: str,
+    ) -> List[Tuple[Dict[str, Any], float]]:
+        """
+        - origin_coord가 있으면 거기서 가장 '거리+인기도'가 좋은 빵집부터 시작
+        - 없으면 route_score(없으면 score)가 가장 높은 빵집부터 시작
+        - 매 단계마다 현재 위치에서
+            composite = route_score - α * distance_km
+          를 최대화하는 미방문 빵집을 선택 (단, d <= max_leg_km)
+        - walk 모드에서는 max_leg_km을 넘는 후보는 '다음 클러스터'로 간주하고
+          경로에서 제외하여 도보 20분 룰을 강제
+        - car / transit 모드에서는 남은 후보를 route_score 순으로 뒤에 붙여
+          다음 클러스터로 점프
+        """
+
+        if not items:
+            return []
+
+        max_leg_km = self._max_leg_distance_km(travel_mode)
+
+        # 거리 페널티 가중치(α)
+        if travel_mode == "walk":
+            distance_weight = 0.8  # 도보는 거리 비중을 더 높게
+        elif travel_mode == "car":
+            distance_weight = 0.2
+        else:  # transit, 기타
+            distance_weight = 0.3
+
+        # 시작점 선택
+        if origin_coord is not None:
+            best_item = None
+            best_score = None
+            for it in items:
+                coord = it.get("coord")
+                if coord is None:
+                    continue
+                d = haversine_distance_km(
+                    origin_coord[0], origin_coord[1],
+                    coord[0], coord[1],
+                )
+                base = it.get("route_score") or it.get("score") or 0.0
+                comp = float(base) - distance_weight * d
+                if best_score is None or comp > best_score:
+                    best_score = comp
+                    best_item = it
+            if best_item is None:
+                start_item = max(
+                    items,
+                    key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
+                )
+            else:
+                start_item = best_item
+        else:
+            start_item = max(
+                items,
+                key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
+            )
+
         used = set()
+        route: List[Dict[str, Any]] = []
 
         route.append(start_item)
         used.add(start_item["orig_idx"])
 
-        # 타임라인 현재 시각(분) – timeline 모드에서만 사용
-        current_time_min: Optional[float] = None
-        if is_timeline_mode:
-            eo = start_item.get("earliest_open_min")
-            current_time_min = float(eo if eo is not None else 600.0)  # 기본 10:00
-
         while len(used) < len(items):
             last = route[-1]
-            last_coord = last["coord"]
+            last_coord = last.get("coord")
             if last_coord is None:
                 break
 
             best_next = None
-            best_cost = float("inf")
+            best_comp = None
 
             for it in items:
                 if it["orig_idx"] in used:
                     continue
-                coord = it["coord"]
+                coord = it.get("coord")
                 if coord is None:
                     continue
-
-                dist_km = haversine(
-                    last_coord[0],
-                    last_coord[1],
-                    coord[0],
-                    coord[1],
+                d = haversine_distance_km(
+                    last_coord[0], last_coord[1],
+                    coord[0], coord[1],
                 )
-                # 구간 최대 이동 거리 초과 → 제외
-                if dist_km > max_leg_km:
+                # 한 구간 최대 거리 제한(클러스터 경계)
+                if d > max_leg_km:
                     continue
 
-                # ✅ 실제 이동 모드(도보/대중교통/자차)를 거리 기반으로 다시 결정
-                leg_mode = self._get_leg_display_mode(dist_km, travel_mode)
-                travel_min = self._estimate_travel_time_minutes(dist_km, leg_mode)
-
-                # 여기서는 날짜/주말/공휴일 가중 없이 "대략적인 평균값"만 사용하기 위해
-                # use_now_if_missing=False 로 넘긴다.
-                approx_wait = self._get_expected_wait_minutes(
-                    it["bakery"],
-                    DateTimeConstraint(
-                        has_date_range=False,
-                        start_date=None,
-                        end_date=None,
-                        start_time=None,
-                        end_time=None,
-                        use_now_if_missing=False,
-                    ),
-                )
-
-                if is_timeline_mode and current_time_min is not None:
-                    eo = it["earliest_open_min"]
-                    open_min = float(eo if eo is not None else 600.0)
-                    arrival_min = current_time_min + travel_min
-                    open_wait = max(0.0, open_min - arrival_min)
-                    cost = travel_min + open_wait + approx_wait + self.avg_purchase_minutes
-                else:
-                    cost = travel_min + approx_wait
-
-                if cost < best_cost:
-                    best_cost = cost
+                base = it.get("route_score") or it.get("score") or 0.0
+                comp = float(base) - distance_weight * d
+                if best_comp is None or comp > best_comp:
+                    best_comp = comp
                     best_next = it
 
             if best_next is None:
-                break
+                # 더 이상 "허용 거리 안의 후보"가 없다면
+                remaining = [
+                    it for it in items
+                    if it["orig_idx"] not in used
+                ]
 
-            # 타임라인 모드일 때는 current_time_min 업데이트
-            if is_timeline_mode and current_time_min is not None:
-                eo = best_next.get("earliest_open_min")
-                open_min = float(eo if eo is not None else 600.0)
-                dist_km = haversine(
-                    last_coord[0],
-                    last_coord[1],
-                    best_next["coord"][0],
-                    best_next["coord"][1],
-                )
-                leg_mode = self._get_leg_display_mode(dist_km, travel_mode)
-                travel_min = self._estimate_travel_time_minutes(dist_km, leg_mode)
-                arrival_min = current_time_min + travel_min
-                open_wait = max(0.0, open_min - arrival_min)
-                approx_wait = self._get_expected_wait_minutes(
-                    best_next["bakery"],
-                    DateTimeConstraint(
-                        has_date_range=False,
-                        start_date=None,
-                        end_date=None,
-                        start_time=None,
-                        end_time=None,
-                        use_now_if_missing=False,
-                    ),
-                )
-                current_time_min = (
-                    arrival_min + open_wait + approx_wait + self.avg_purchase_minutes
-                )
+                if travel_mode == "walk":
+                    # 도보 모드: 20분(≈ max_leg_km) 넘는 후보는
+                    # 도보 코스에서 제외 → 경로 종료
+                    break
+                else:
+                    # 자차/대중교통 모드: 남은 후보를 route_score 순으로 뒤에 붙여
+                    # 다음 클러스터로 점프
+                    remaining_sorted = sorted(
+                        remaining,
+                        key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
+                        reverse=True,
+                    )
+                    route.extend(remaining_sorted)
+                    break
 
             route.append(best_next)
             used.add(best_next["orig_idx"])
 
-        remaining = [it for it in items if it["orig_idx"] not in used]
-        remaining_sorted = sorted(remaining, key=lambda x: x["orig_idx"])
-
-        final_items = route + remaining_sorted
-        return [(it["bakery"], it["score"]) for it in final_items]
+        return [(it["bakery"], it["score"]) for it in route]
 
     # ==============================
     #  메인 질의 처리
     # ==============================
 
     def answer_query(self, query: str) -> str:
-        print("============================================================")
-        print(f"🔍 '{query}'")
-        print("============================================================")
+        logs: List[str] = []
 
-        # 0) 질문 타입 판별: 추천 vs 지식 Q&A
-        q_type = self._infer_query_type(query)
-        if q_type == "knowledge":
-            # 빵집 추천이 아니라, 빵/디저트 지식 설명 모드로 처리
-            return self._answer_knowledge_query_with_llm(query)
+        query_type = self._infer_query_type(query)
+        logs.append(f"🧭 질의 타입: {query_type}")
 
-        # 0) 이동 수단 인식
-        travel_mode = self._infer_travel_mode(query)
-        mode_label = self._mode_label(travel_mode)
-        print(f"   🚶 이동 수단 인식: {mode_label} 기준 동선 최적화")
+        if query_type == "knowledge":
+            answer_text = self._answer_knowledge_query_with_llm(query)
+            return answer_text
 
-        # 1) 날짜/시간 파싱
-        constraint: DateTimeConstraint = parse_date_time_from_query(query)
-        now_intent = self._has_now_intent(query)
-
-        # '크리스마스/성탄절' 자연어를 명시 날짜로 인식
-        if (
-            not constraint.has_date_range
-            and any(k in query for k in ["크리스마스", "성탄절"])
-        ):
-            from datetime import date as _date
-
-            today = datetime.now().date()
-            year = today.year
-            christmas = _date(year, 12, 25)
-            if today > christmas:
-                christmas = _date(year + 1, 12, 25)
-
-            constraint.has_date_range = True
-            constraint.start_date = christmas
-            constraint.end_date = christmas
-            # 날짜가 명시됐으므로 '지금 영업 중' 필터는 쓰지 않음
-            constraint.use_now_if_missing = False
-
-            print(
-                f"   📅 '크리스마스' 언급 감지 → {christmas} 하루 방문으로 인식합니다."
-            )
-
-        # '지금/바로' 기반 now 모드 결정
-        # - 날짜/시간 언급이 전혀 없을 때만 now 모드 가능
-        if (
-            not constraint.has_date_range
-            and constraint.start_time is None
-            and constraint.end_time is None
-        ):
-            if now_intent:
-                constraint.use_now_if_missing = True
-                print("   🕒 '지금/바로' 의도 인식 → 현재 시각 기준 '영업 중' 매장만 추천합니다.")
-            else:
-                constraint.use_now_if_missing = False
-                print(
-                    "   🕒 명시된 시간/날짜/지금 언급 없음 → 전반적인 영업시간을 기준으로 "
-                    "하루 코스를 구성합니다."
-                )
-        else:
-            # 날짜나 시간이 명시된 경우에는 '지금 영업 중' 필터를 사용하지 않음
-            if constraint.has_date_range or constraint.start_time or constraint.end_time:
-                constraint.use_now_if_missing = False
-
-        # 로그 출력
-        if constraint.has_date_range:
-            print(
-                f"   📅 방문 기간 인식: {constraint.start_date} ~ {constraint.end_date}"
-            )
-        if constraint.start_time or constraint.end_time:
-            st = (
-                constraint.start_time.strftime("%H:%M")
-                if constraint.start_time
-                else "제한 없음"
-            )
-            et = (
-                constraint.end_time.strftime("%H:%M")
-                if constraint.end_time
-                else "제한 없음"
-            )
-            print(f"   🕒 방문 시간대 인식: {st} ~ {et}")
-        elif constraint.use_now_if_missing:
-            now = datetime.now()
-            print(
-                f"   🕒 현재 시각({now.strftime('%Y-%m-%d %H:%M')}) 기준으로 "
-                "영업 중인 매장만 추천합니다."
-            )
-
-        # 2) 위치 파싱
         loc_filter, loc_logs = extract_location_from_query(query)
-        for line in loc_logs:
-            print(line)
+        logs.extend(loc_logs)
 
-        # 3) 메뉴 키워드
+        transport_mode, transport_logs = detect_transport_mode(query)
+        logs.extend(transport_logs)
+
+        dt_constraint = parse_date_time_from_query(query)
+
+        if (
+            not dt_constraint.has_date_range
+            and dt_constraint.start_time is None
+            and dt_constraint.end_time is None
+            and not self._has_now_intent(query)
+        ):
+            dt_constraint.use_now_if_missing = False
+
+        logs.append(
+            "🕒 시간/날짜 파싱 결과: "
+            f"has_date_range={dt_constraint.has_date_range}, "
+            f"start_date={dt_constraint.start_date}, end_date={dt_constraint.end_date}, "
+            f"start_time={dt_constraint.start_time}, end_time={dt_constraint.end_time}, "
+            f"use_now_if_missing={dt_constraint.use_now_if_missing}"
+        )
+
         menu_keywords = extract_menu_keywords(query, self.menu_keywords_set)
-        if menu_keywords:
-            print(f"   🍞 메뉴 키워드 인식: {menu_keywords}")
-        else:
-            print("   ℹ️ 메뉴 키워드를 명확히 찾지 못했습니다. 디저트/빵집 중심으로 검색합니다.")
+        logs.append(f"🍞 메뉴 키워드 인식: {menu_keywords}")
 
-        # 4) 빵지순례/대표 코스 의도
         intent_flags = detect_flagship_tour_intent(query, menu_keywords)
-        if intent_flags.get("is_flagship_tour"):
-            print("   🧭 의도: '대표 빵집' 또는 '빵지순례 코스' 추천 모드")
+        logs.append(f"🧭 의도 플래그: {intent_flags}")
 
-        # 5) 벡터 검색용 쿼리 생성
-        queries = generate_search_queries(query, menu_keywords, loc_filter, intent_flags)
-        print("   🔍 벡터 검색용 생성 쿼리:")
-        for q in queries:
-            print(f"      - {q}")
-
-        # 6) 벡터 검색
-        raw_candidates = self._vector_search_bakeries(queries, top_k=60)
-        print(f"   🔎 벡터 검색 기반 1차 후보: {len(raw_candidates)}개")
-
-        # 7) 위치 필터
-        loc_filtered = filter_bakeries_by_location(raw_candidates, loc_filter)
-        print(f"   📍 위치/범위 필터 후 후보: {len(loc_filtered)}개")
-
-        # 8) 시간/영업 필터
-        final_candidates: List[Dict[str, Any]] = []
-        last_close_map: Dict[str, datetime.time] = {}
-
-        # now 필터는 "날짜가 없는 + 지금/바로" 질의에서만 사용
-        use_now_filter = constraint.use_now_if_missing and not constraint.has_date_range
-
-        if use_now_filter:
-            # '지금/바로' 모드 – 현재 영업 중인 매장만
-            now = datetime.now()
-            before = len(loc_filtered)
-            for b in loc_filtered:
-                if is_open_at(b, now, self.business_hours_index):
-                    final_candidates.append(b)
-            print(
-                f"   🕒 현재 영업 중 필터 적용 전 {before}개 → 후 {len(final_candidates)}개"
-            )
-        else:
-            # 날짜/시간 제약이 있다면 그 기간 중 영업하는 매장만,
-            # 제약이 없다면 전반적인 영업 패턴 기준으로 필터
-            before = len(loc_filtered)
-            for b in loc_filtered:
-                ok, last_close = is_available_in_period(
-                    b, constraint, self.business_hours_index
-                )
-                if ok:
-                    final_candidates.append(b)
-                    if constraint.has_date_range and last_close:
-                        name = b.get("name") or b.get("slug_en") or ""
-                        last_close_map[name] = last_close
-            print(
-                f"   🕒 방문 기간/시간 필터 적용 전 {before}개 → 후 {len(final_candidates)}개"
-            )
-
-        if not final_candidates:
-            return (
-                "조건에 맞는 영업 중인 빵집을 찾지 못했습니다. "
-                "날짜/시간 또는 지역 범위를 조금 넓혀서 다시 요청해 주세요."
-            )
-
-        # 9) 메뉴/리뷰/의도 기반 스코어링 + 브랜드 중복 제어
-        ranked = rank_bakeries(
-            candidates=final_candidates,
+        search_queries = generate_search_queries(
+            user_query=query,
             menu_keywords=menu_keywords,
+            loc_filter=loc_filter,
             intent_flags=intent_flags,
-            review_stats_cache=self.review_stats_cache,
-            known_flagship_names=self.known_flagship_names,
-            top_k=10,
+        )
+        logs.append("🔍 벡터 검색용 생성 쿼리:")
+        for q in search_queries:
+            logs.append(f"   - {q}")
+
+        candidates = self._vector_search_bakeries(search_queries, top_k=80)
+        logs.append(
+            f"🔎 벡터 검색 기반 1차 후보: {len(candidates)}개"
         )
 
-        # 10) (선택) LLM 재랭킹
-        try:
-            ranked = self._rerank_with_llm(query, ranked)
-        except Exception as e:
-            print(f"⚠️ LLM 재랭킹 중 오류 발생, 내부 스코어 순서 사용: {e}")
-
-        # 11) 이동 수단/동선을 고려한 순서 재구성
-        ranked = self._order_bakeries_by_route(
-            ranked, loc_filter, travel_mode, constraint
+        before_loc = len(candidates)
+        candidates = filter_bakeries_by_location(candidates, loc_filter)
+        logs.append(
+            f"📍 위치/범위 필터 후 후보: {before_loc} → {len(candidates)}개"
         )
 
-        # 도보의 경우: 출발지 기준 20분(1.3km) 초과 매장은 제외
-        if (
-            travel_mode == "walk"
-            and isinstance(loc_filter, LocationFilter)
-            and loc_filter.kind == "point"
-            and loc_filter.lat is not None
-            and loc_filter.lon is not None
-        ):
-            walk_threshold = self._max_leg_distance_km("walk")
-            origin_lat = loc_filter.lat
-            origin_lon = loc_filter.lon
-            filtered_ranked = []
-            for bakery, score in ranked:
-                try:
-                    lat_val = float(bakery.get("latitude", 0) or 0)
-                    lon_val = float(bakery.get("longitude", 0) or 0)
-                except Exception:
-                    continue
-                if not lat_val or not lon_val:
-                    continue
-                dist0 = haversine(origin_lat, origin_lon, lat_val, lon_val)
-                if dist0 <= walk_threshold:
-                    filtered_ranked.append((bakery, score))
-            ranked = filtered_ranked
+        user_lat = getattr(loc_filter, "lat", None)
+        user_lon = getattr(loc_filter, "lon", None)
 
-        top_n = ranked[:10]
+        ranked_list, ranking_logs = rank_bakeries(
+            user_query=query,
+            candidates=candidates,
+            menu_keywords=menu_keywords,
+            loc_filter=loc_filter,
+            user_lat=user_lat,
+            user_lon=user_lon,
+            transport_mode=transport_mode,
+            intent_flags=intent_flags,
+        )
+        logs.extend(ranking_logs)
 
-        if not top_n:
-            return (
-                "도보 이동 기준 20분 이내에서 추천할 수 있는 빵집을 찾지 못했습니다. "
-                "조금 더 넓은 범위(대중교통/자차 이동)로 다시 요청해 주세요."
+        if ranked_list:
+            if transport_mode == TransportMode.WALK:
+                travel_mode_str = "walk"
+            elif transport_mode == TransportMode.CAR:
+                travel_mode_str = "car"
+            else:
+                travel_mode_str = "transit"
+
+            ranked_list = self._order_bakeries_by_route(
+                ranked=ranked_list,
+                loc_filter=loc_filter,
+                travel_mode=travel_mode_str,
+                constraint=dt_constraint,
+                menu_keywords=menu_keywords,
             )
 
-        # 12) 답변 구성
-        lines: List[str] = []
-        lines.append("안녕하세요, 30년간 제빵 현장에서 일해온 빵집 전문가입니다.\n")
+        MAX_RESULTS = 10
+        if len(ranked_list) > MAX_RESULTS:
+            ranked_list = ranked_list[:MAX_RESULTS]
 
-        if constraint.use_now_if_missing:
-            lines.append(
-                f"요청하신 조건에 맞춰, 지금({datetime.now().strftime('%Y-%m-%d %H:%M')}) "
-                f"기준으로 바로 가기 좋은 빵집들을 ({mode_label} 이동 기준 동선 포함) 추천드립니다.\n"
-            )
-        elif constraint.has_date_range or constraint.start_time or constraint.end_time:
-            lines.append(
-                f"요청하신 방문 기간/시간을 고려해서 ({mode_label} 이동 기준 동선 포함) "
-                "아래와 같이 코스를 구성했습니다.\n"
-            )
+        explain_lines: List[str] = []
+
+        explain_lines.append("=" * 60)
+        explain_lines.append(f"🔍 '{query}'")
+        explain_lines.append("=" * 60)
+
+        for log in logs:
+            if not log:
+                continue
+            if log[0].isspace():
+                explain_lines.append(log)
+            else:
+                explain_lines.append(f"   {log}")
+
+        explain_lines.append("")
+
+        if transport_mode in {TransportMode.SUBWAY, TransportMode.BUS, TransportMode.TRANSIT_MIXED}:
+            route_desc = "대중교통 이동 기준 동선"
+        elif transport_mode == TransportMode.WALK:
+            route_desc = "도보 이동 기준 동선"
+        elif transport_mode == TransportMode.CAR:
+            route_desc = "자차 이동 기준 동선"
         else:
-            lines.append(
-                f"명시된 시간은 없으셔서, 전반적인 영업시간(오픈 시간)과 이동/대기시간을 고려해 "
-                f"하루 동안 돌기 좋은 코스로 ({mode_label} 기준) 추천드립니다.\n"
+            route_desc = "이동 수단을 고려한 동선"
+
+        if dt_constraint.has_date_range and dt_constraint.start_date:
+            if dt_constraint.end_date and dt_constraint.start_date == dt_constraint.end_date:
+                date_desc = f"{dt_constraint.start_date} 하루"
+            elif dt_constraint.end_date:
+                date_desc = f"{dt_constraint.start_date} ~ {dt_constraint.end_date}"
+            else:
+                date_desc = f"{dt_constraint.start_date} 이후"
+        else:
+            date_desc = "요청하신 날짜/시간"
+
+        explain_lines.append("안녕하세요, 30년간 제빵 현장에서 일해온 빵집 전문가입니다.")
+        explain_lines.append("")
+        explain_lines.append(
+            f"요청하신 방문 기간/시간({date_desc})을 고려해서 "
+            f"({route_desc} 포함) 아래와 같이 코스를 구성했습니다.\n"
+        )
+
+        answer_body = self.render_answer(
+            user_query=query,
+            ranked_bakeries=[b for b, _ in ranked_list],
+            loc_filter=loc_filter,
+            dt_constraint=dt_constraint,
+            transport_mode=transport_mode,
+            intent_flags=intent_flags,
+            menu_keywords=menu_keywords,
+            debug_logs=logs,
+        )
+
+        full_answer = "\n".join(explain_lines) + "\n" + answer_body
+        return full_answer
+
+    def render_answer(
+        self,
+        user_query: str,
+        ranked_bakeries: List[Dict[str, Any]],
+        loc_filter: LocationFilter,
+        dt_constraint: DateTimeConstraint,
+        transport_mode: TransportMode,
+        intent_flags: Dict[str, Any],
+        menu_keywords: List[str],
+        debug_logs: List[str],
+    ) -> str:
+        lines: List[str] = []
+
+        if not ranked_bakeries:
+            lines.append("죄송하지만, 주어진 조건에 맞는 빵집을 찾지 못했습니다.")
+            lines.append("")
+            lines.append("- 이동 수단이나 방문 지역/시간 조건을 조금 완화해서 다시 문의해 주세요.")
+            return "\n".join(lines)
+
+        total_travel_min: float = 0.0
+        total_wait_min: float = 0.0
+
+        start_minutes, start_label = self._infer_start_minutes(dt_constraint)
+        current_time_min: float = float(start_minutes)
+
+        if transport_mode == TransportMode.SUBWAY:
+            mode_label = "지하철"
+        elif transport_mode == TransportMode.BUS:
+            mode_label = "버스"
+        elif transport_mode == TransportMode.TRANSIT_MIXED:
+            mode_label = "대중교통"
+        elif transport_mode == TransportMode.CAR:
+            mode_label = "자차"
+        else:
+            mode_label = "도보"
+
+        lines.append(f"총 {len(ranked_bakeries)}곳의 빵집을 추천드립니다.\n")
+        lines.append(
+            f"(별도 방문 시작 시간이 명시되지 않아, 방문 시작 시각을 {start_label} 기준으로 가정했습니다.)\n"
+        )
+
+        prev_lat: Optional[float] = None
+        prev_lon: Optional[float] = None
+        prev_name: Optional[str] = None
+
+        MAX_CLUSTER_WALK_MIN = 10
+
+        for idx, bakery in enumerate(ranked_bakeries, start=1):
+            name = (
+                bakery.get("name")
+                or bakery.get("slug_ko")
+                or bakery.get("slug_en")
+                or f"추천 {idx}번 빵집"
+            )
+            district = bakery.get("district") or bakery.get("_district") or ""
+            road_address = (
+                bakery.get("road_address")
+                or bakery.get("jibun_address")
+                or bakery.get("address")
+                or ""
             )
 
-        origin_lat: Optional[float] = None
-        origin_lon: Optional[float] = None
-        if (
-            isinstance(loc_filter, LocationFilter)
-            and loc_filter.kind == "point"
-            and loc_filter.lat is not None
-            and loc_filter.lon is not None
-        ):
-            origin_lat = loc_filter.lat
-            origin_lon = loc_filter.lon
-
-        prev_lat = origin_lat
-        prev_lon = origin_lon
-
-        for idx, (bakery, score) in enumerate(top_n, start=1):
-            name = bakery.get("name") or bakery.get("slug_en") or "이름 미상"
-            district = bakery.get("district") or bakery.get("_district") or "-"
-            road_addr = bakery.get("road_address") or "-"
-            rating_info = bakery.get("rating") or {}
-            rating = (
-                rating_info.get("naver_rate")
-                or rating_info.get("kakao_rate")
-                or "정보 없음"
-            )
-
-            total_reviews, _ = (
-                self.review_stats_cache.get(name)
-                if name in self.review_stats_cache
-                else (0, {})
-            )
-            pop_score = compute_popularity_score(bakery, self.review_stats_cache)
-
-            lines.append("==================================================")
-            lines.append(f"🥖 추천 {idx}: {name}")
-            lines.append("==================================================")
-            lines.append(
-                f"⭐ 통합 평점(추정): {rating}점 / 리뷰 규모: {total_reviews:,}건 수준 "
-                f"(인기도 점수: {pop_score:.2f})"
-            )
-            lines.append(f"📍 위치: {district}")
-            lines.append(f"📡 도로명 주소: {road_addr}")
-
-            lat_val = None
-            lon_val = None
+            lat = None
+            lon = None
             try:
-                lat_val = float(bakery.get("latitude", 0) or 0)
-                lon_val = float(bakery.get("longitude", 0) or 0)
+                lat = float(bakery.get("latitude") or 0)
+                lon = float(bakery.get("longitude") or 0)
+                if lat == 0 or lon == 0:
+                    lat, lon = None, None
             except Exception:
-                lat_val = lon_val = None
+                lat, lon = None, None
 
-            if lat_val and lon_val:
-                # 출발지 → 첫 매장
-                if origin_lat is not None and origin_lon is not None and idx == 1:
-                    dist0 = haversine(origin_lat, origin_lon, lat_val, lon_val)
-                    leg_mode0 = self._get_leg_display_mode(dist0, travel_mode)
-                    leg_label0 = self._mode_label(leg_mode0)
-                    travel0 = self._estimate_travel_time_minutes(dist0, leg_mode0)
-                    lines.append(
-                        f"🚩 출발지 → 이 매장까지: 약 {dist0:.2f}km / 예상 {travel0:.0f}분 ({leg_label0})"
-                    )
-                # 이전 추천 매장 → 현재 매장
-                elif prev_lat is not None and prev_lon is not None:
-                    dist_p = haversine(prev_lat, prev_lon, lat_val, lon_val)
-                    leg_mode_p = self._get_leg_display_mode(dist_p, travel_mode)
-                    leg_label_p = self._mode_label(leg_mode_p)
-                    travel_p = self._estimate_travel_time_minutes(dist_p, leg_mode_p)
-                    lines.append(
-                        f"➡ 이전 추천 매장 → 여기까지: 약 {dist_p:.2f}km / 예상 {travel_p:.0f}분 ({leg_label_p})"
-                    )
+            rating = _safe_get_rating(bakery)
+            try:
+                popularity = compute_popularity_score(bakery, self.review_stats_cache)
+            except Exception:
+                popularity = 0.0
 
-            if lat_val and lon_val:
-                prev_lat, prev_lon = lat_val, lon_val
+            total_reviews, kw_counts = self.review_stats_cache.get(
+                bakery.get("name") or bakery.get("slug_en") or "",
+                (0, {}),
+            )
+            try:
+                total_reviews_int = int(str(total_reviews).replace(",", ""))
+            except Exception:
+                total_reviews_int = 0
 
-            # 종료 시각 + 라스트오더 안내 (날짜/시간 질의일 때만)
-            if constraint.has_date_range and constraint.end_date and constraint.end_time:
-                if name in last_close_map:
-                    last_t = last_close_map[name]
-                    if last_t < constraint.end_time:
-                        lines.append(
-                            f"⚠️ 참고: {constraint.end_date} 기준 라스트오더/마감 시간은 "
-                            f"{last_t.strftime('%H:%M')}라, 요청하신 종료 시각"
-                            f"({constraint.end_time.strftime('%H:%M')})보다 조금 이른 편입니다."
-                        )
-
-            wait_min = self._get_expected_wait_minutes(bakery, constraint)
-            if wait_min > 0.5:
-                lines.append(f"⏱ 평균 예상 대기시간(주말/공휴일/인기도 반영): 약 {wait_min:.0f}분 기준")
-
-            rk = bakery.get("review_keywords") or []
-            top_rk = rk[:5]
-            if top_rk:
-                desc = []
-                for r in top_rk:
-                    kw = r.get("keyword")
-                    c = r.get("count")
-                    desc.append(f"\"{kw}\" {c}회")
-                lines.append("\n✨ 이 집의 특징(리뷰 키워드 상위):")
-                lines.append("   - " + ", ".join(desc))
+            feature_parts: List[str] = []
+            if isinstance(kw_counts, dict) and kw_counts:
+                top_items = sorted(kw_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+                for kw, cnt in top_items:
+                    try:
+                        cnt_int = int(str(cnt).replace(",", ""))
+                    except Exception:
+                        cnt_int = 0
+                    feature_parts.append(f"\"{kw}\" {cnt_int}회")
 
             kd = bakery.get("keyword_details") or {}
             final_kw = kd.get("final_keywords") or []
-            if final_kw:
-                show = final_kw[:8]
-                lines.append("\n   - 대표 메뉴/키워드: " + ", ".join(show))
+            rep_keywords = ", ".join(final_kw[:8]) if final_kw else ""
 
-            lines.append("\n👨‍🍳 전문가 코멘트:")
-            if intent_flags.get("is_flagship_tour"):
+            try:
+                expected_wait = self._get_expected_wait_minutes(bakery, dt_constraint)
+            except Exception:
+                expected_wait = 0.0
+
+            place_url = ""
+            if lat is not None and lon is not None:
+                place_url = build_kakao_place_url(name, lat, lon)
+
+            station_line = ""
+            if (
+                lat is not None
+                and lon is not None
+                and transport_mode in {TransportMode.SUBWAY, TransportMode.TRANSIT_MIXED}
+            ):
+                try:
+                    station_name, s_lat, s_lon = find_nearest_subway_station(lat, lon)
+                except Exception:
+                    station_name, s_lat, s_lon = "", 0.0, 0.0
+
+                if station_name and s_lat and s_lon:
+                    dist_km = haversine_distance_km(s_lat, s_lon, lat, lon)
+                    walk_min = int(round(estimate_walk_time_minutes(dist_km)))
+                    station_place_url = build_kakao_place_url(station_name, s_lat, s_lon)
+
+                    station_line = (
+                        f"🚇 지하철: '{station_name}'에서 하차 후 도보 약 {walk_min}분 내외\n"
+                        f"   - 지하철역 위치(카카오맵): {station_place_url}"
+                    )
+
+            lines.append("=" * 50)
+            lines.append(f"🥖 추천 {idx}: {name}")
+            lines.append("=" * 50)
+
+            if rating > 0 or total_reviews_int > 0 or popularity > 0:
                 lines.append(
-                    "   일정 수준 이상의 리뷰 수와 인기도를 가진 매장으로, "
-                    "빵지순례 코스로 묶어서 방문하기 좋은 집입니다."
+                    f"⭐ 통합 평점(추정): {rating:.2f}점 / 리뷰 규모: "
+                    f"{total_reviews_int:,}건 수준 (인기도 점수: {popularity:.2f})"
                 )
-            else:
-                if menu_keywords:
+            elif rating > 0:
+                lines.append(f"⭐ 통합 평점(추정): {rating:.2f}점")
+
+            if district:
+                lines.append(f"📍 위치: {district}")
+            if road_address:
+                lines.append(f"📡 도로명 주소: {road_address}")
+            if place_url:
+                lines.append(f"🔗 빵집 위치(카카오맵): {place_url}")
+
+            if idx == 1:
+                if mode_label in ["지하철", "버스", "대중교통"]:
+                    lines.append(f"🧭 이동 수단: {mode_label} 기준으로 동선을 구성했습니다.")
+                elif mode_label == "자차":
+                    lines.append("🧭 이동 수단: 자차 기준으로 동선을 구성했습니다.")
+                else:
+                    lines.append("🧭 이동 수단: 도보 기준으로 동선을 구성했습니다.")
+
+            if station_line:
+                lines.append(station_line)
+
+            # 이전 매장 → 현재 매장 이동
+            leg_travel_min = 0.0
+
+            if (
+                idx > 1
+                and prev_lat is not None
+                and prev_lon is not None
+                and lat is not None
+                and lon is not None
+                and prev_name
+            ):
+                try:
+                    leg_km, walk_between_est, car_between_min = self._get_leg_distance_and_durations(
+                        prev_lat, prev_lon, lat, lon
+                    )
+                    walk_between_min = int(round(walk_between_est))
+
+                    if walk_between_min <= MAX_CLUSTER_WALK_MIN:
+                        leg_travel_min = float(walk_between_min)
+                        lines.append(
+                            f"➡ 이전 추천 매장 → 여기까지: 도보 약 {walk_between_min}분"
+                        )
+                        route_url = build_kakao_route_url(
+                            "walk",
+                            prev_name, prev_lat, prev_lon,
+                            name, lat, lon,
+                        )
+                        if route_url:
+                            lines.append(f"   - 도보 동선(카카오맵): {route_url}")
+                    else:
+                        if transport_mode in {
+                            TransportMode.SUBWAY,
+                            TransportMode.BUS,
+                            TransportMode.TRANSIT_MIXED,
+                        }:
+                            if car_between_min <= 0:
+                                transit_min = max(walk_between_min * 0.6, 10.0)
+                            else:
+                                if leg_km <= 3.0:
+                                    transit_min = max(
+                                        car_between_min * 2.0,
+                                        walk_between_min * 0.6,
+                                        10.0,
+                                    )
+                                else:
+                                    transit_min = max(
+                                        car_between_min * 1.5,
+                                        walk_between_min * 0.5,
+                                        20.0,
+                                    )
+
+                            leg_travel_min = float(transit_min)
+                            lines.append(
+                                f"➡ 이전 추천 매장 → 여기까지: 약 {leg_km:.2f}km / "
+                                f"예상 {int(round(transit_min))}분 ({mode_label})"
+                            )
+                            route_url = build_kakao_route_url(
+                                "traffic",
+                                prev_name, prev_lat, prev_lon,
+                                name, lat, lon,
+                            )
+                            if route_url:
+                                lines.append(
+                                    f"   - 대중교통 길찾기(카카오맵): {route_url}\n"
+                                    "     (실제 버스/지하철 노선과 실시간 소요 시간은 위 링크에서 확인해 주세요.)"
+                                )
+                        elif transport_mode == TransportMode.CAR:
+                            if car_between_min > 0:
+                                car_min = car_between_min
+                            else:
+                                car_min = estimate_transit_time_minutes(
+                                    leg_km, TransportMode.CAR
+                                )
+                            leg_travel_min = float(car_min)
+                            lines.append(
+                                f"➡ 이전 추천 매장 → 여기까지: 약 {leg_km:.2f}km / "
+                                f"예상 {int(round(car_min))}분 (자차)"
+                            )
+                            route_url = build_kakao_route_url(
+                                "car",
+                                prev_name, prev_lat, prev_lon,
+                                name, lat, lon,
+                            )
+                            if route_url:
+                                lines.append(
+                                    f"   - 자차 길찾기(카카오맵): {route_url}"
+                                )
+                        else:
+                            # 도보 모드(TransportMode.WALK)에서는
+                            # 이미 경로 구성 단계에서 20분 초과 구간을 제거했으므로
+                            # 여기에서는 Kakao 기준 시간이 20분을 조금 넘더라도
+                            # 그대로 표시만 해준다.
+                            leg_travel_min = float(walk_between_min)
+                            lines.append(
+                                f"➡ 이전 추천 매장 → 여기까지: 도보 약 {walk_between_min}분"
+                            )
+                            route_url = build_kakao_route_url(
+                                "walk",
+                                prev_name, prev_lat, prev_lon,
+                                name, lat, lon,
+                            )
+                            if route_url:
+                                lines.append(f"   - 도보 동선(카카오맵): {route_url}")
+                except Exception:
+                    leg_travel_min = 0.0
+
+            total_travel_min += leg_travel_min
+
+            open_minutes = self._get_earliest_open_minutes(bakery)
+            arrival_time_min = current_time_min + leg_travel_min
+
+            wait_for_open = 0.0
+            if open_minutes is not None and arrival_time_min < open_minutes:
+                wait_for_open = float(open_minutes - arrival_time_min)
+
+            base_wait = float(expected_wait or 0.0)
+            total_wait_for_shop = max(0.0, wait_for_open + base_wait)
+
+            stay_minutes = float(self.avg_purchase_minutes)
+            depart_time_min = arrival_time_min + total_wait_for_shop + stay_minutes
+
+            total_wait_min += total_wait_for_shop
+
+            if base_wait and base_wait > 0:
+                wait_text = (
+                    f"⏱ 평균 예상 대기시간(주말/공휴일/인기도 반영): "
+                    f"약 {int(round(base_wait))}분 기준"
+                )
+                lines.append(wait_text)
+
+            lines.append("")
+            lines.append("⏰ 방문 시간 계획(예상):")
+            lines.append(
+                f"   - 예상 도착 시각: {self._format_minutes_to_hhmm(int(round(arrival_time_min)))}"
+            )
+            if leg_travel_min > 0:
+                lines.append(
+                    f"   - 이전 매장에서 이동: 약 {int(round(leg_travel_min))}분"
+                )
+            if wait_for_open > 0:
+                if open_minutes is not None:
+                    open_str = self._format_minutes_to_hhmm(int(open_minutes))
                     lines.append(
-                        "   리뷰상으로 요청하신 메뉴/취향과의 궁합이 좋아, "
-                        "원하시는 빵/디저트를 중심으로 즐기기에 적합한 매장입니다."
+                        f"   - 오픈까지 대기: 약 {int(round(wait_for_open))}분 "
+                        f"(영업 시작 시각 {open_str} 기준)"
                     )
                 else:
                     lines.append(
-                        "   전체적인 평점과 리뷰 키워드를 봤을 때, "
-                        "빵과 디저트 자체 만족도가 높아 무난히 방문하시기 좋은 곳입니다."
+                        f"   - 오픈까지 대기: 약 {int(round(wait_for_open))}분"
                     )
+            if base_wait > 0:
+                lines.append(
+                    f"   - 줄 서는 시간(예상): 약 {int(round(base_wait))}분"
+                )
+            lines.append(
+                f"   - 매장 내 머무는 시간(구매/시식): 약 {int(round(stay_minutes))}분"
+            )
+            lines.append(
+                f"   → 다음 매장 이동 시작 시각: {self._format_minutes_to_hhmm(int(round(depart_time_min)))}"
+            )
+
+            current_time_min = depart_time_min
 
             lines.append("")
+            lines.append("✨ 이 집의 특징(리뷰 키워드 상위):")
+            if feature_parts:
+                lines.append("   - " + ", ".join(feature_parts))
+            else:
+                lines.append("   - 리뷰 키워드 데이터가 충분하지 않습니다.")
+
+            lines.append("")
+            if rep_keywords:
+                lines.append(f"   - 대표 메뉴/키워드: {rep_keywords}")
+            else:
+                lines.append("   - 대표 메뉴/키워드: (데이터 부족)")
+
+            lines.append("")
+            lines.append("👨‍🍳 전문가 코멘트:")
+            lines.append(
+                "   일정 수준 이상의 리뷰 수와 인기도를 가진 매장으로, "
+                "빵지순례 코스로 묶어서 방문하기 좋은 집입니다."
+            )
+            lines.append("")
+
+            prev_lat, prev_lon, prev_name = lat, lon, name
+
+        # ----------------------
+        # 코스 설계 이유 요약
+        # ----------------------
+        lines.append("==================================================")
+        lines.append("🧾 이 코스를 이렇게 짠 이유")
+        lines.append("==================================================")
+
+        menu_focus_line = build_menu_focus_sentence(
+            menu_keywords=menu_keywords,
+            has_menu_focus=bool(intent_flags.get("has_menu_focus", False)),
+        )
+        lines.append(menu_focus_line)
+
+        if transport_mode in {TransportMode.SUBWAY, TransportMode.BUS, TransportMode.TRANSIT_MIXED}:
+            lines.append(
+                "- 대전 1호선 주요 역 주변으로 묶어서, 지하철 노선도를 따라 "
+                "한 방향으로 이동할 수 있도록 역 단위 클러스터를 구성했습니다."
+            )
+        else:
+            lines.append(
+                "- 현재 위치(또는 첫 방문 매장)를 기준으로 주변 빵집들을 거리 기반 클러스터로 나눈 뒤, "
+                "가까운 클러스터를 먼저 소진하고 그 다음 클러스터로 이동하는 단방향(One-way) 동선을 구성했습니다."
+            )
 
         lines.append(
-            "💡 다른 빵 종류나 맛/식감, 웨이팅 조건, 방문 시간/기간, 동네/역 이름, "
-            "이동 수단(도보/대중교통/자차)을 바꿔서 다시 찾아보고 싶으시면 편하게 말씀해 주세요."
+            "- 각 클러스터 및 매장 선택 시, 단순 거리뿐 아니라 인기도(route_score)도 함께 고려하여 "
+            "너무 멀리 돌아가지 않으면서도 인기 있는 매장은 비교적 코스 앞쪽에 배치하려고 했습니다."
         )
+        lines.append(
+            "- 리뷰 수와 waiting_prediction, 주말/공휴일 가중치를 이용해 "
+            "대기시간이 길거나 인기·품절 위험이 있는 매장은 최대한 코스의 앞쪽에 배치했습니다."
+        )
+        if transport_mode == TransportMode.WALK:
+            lines.append(
+                f"- 도보 코스의 경우, 한 번에 이동하는 구간이 대략 {int(self.MAX_WALK_MINUTES)}분을 넘지 않도록 "
+                "후보를 제한해 '도보 20분 룰'을 최대한 지키도록 구성했습니다."
+            )
+        else:
+            lines.append(
+                "- Kakao Mobility 내비 API가 허용하는 범위 안에서는 실제 도로 기준 거리와 차량 소요 시간을 활용해 "
+                "도보·대중교통·자차 이동시간을 추정했고, API 호출에 실패한 경우에만 직선거리 기반 보정값을 사용했습니다."
+            )
+
+        lines.append("")
+        lines.append("⏱️ 예상 소요 시간 요약 (이동 + 줄 서기)")
+        lines.append(
+            f"- 매장 간 이동 시간 합계(대략): 약 {int(round(total_travel_min))}분"
+        )
+        lines.append(
+            f"- 줄 서는 시간(오픈 대기 포함, 대략): 약 {int(round(total_wait_min))}분"
+        )
+        lines.append(
+            "- 실제 소요 시간은 요일/시간대/실제 대기 인원과 실시간 교통 상황에 따라 달라질 수 있으며, "
+            "각 매장에서 머무르는 시간(시식·포장 등)은 사용자의 스타일에 따라 달라질 수 있습니다."
+        )
+
+        if intent_flags.get("debug", False) and debug_logs:
+            lines.append("=" * 50)
+            lines.append("[디버그 로그]")
+            lines.extend(debug_logs)
 
         return "\n".join(lines)
 
@@ -1166,13 +1662,7 @@ class BakeryExpertRAG:
     # =======================================================
 
     def _answer_knowledge_query_with_llm(self, query: str) -> str:
-        """
-        빵/디저트에 대한 이론·역사·종류·제법 질문에 대해
-        LLM이 제과·제빵 전문가로 답변하는 경로.
-        dessert_en.json 데이터나 랭킹 모듈은 사용하지 않는다.
-        """
         if self.llm_client is None:
-            # LLM 미설정 시 안전 메시지
             return (
                 "현재 빵 이론 설명용 LLM이 설정되어 있지 않습니다. "
                 "환경 설정 후 다시 시도해 주세요."
@@ -1216,7 +1706,7 @@ class BakeryExpertRAG:
                 max_tokens=1200,
             )
             answer = resp.choices[0].message.content.strip()
-            print("🧠 지식 Q&A LLM 응답 생성 성공 (solar-pro-2)")
+            print("🧠 지식 Q&A LLM 응답 생성 성공 (solar-mini-250422)")
             return answer
         except Exception as e:
             print(f"⚠️ 지식 Q&A LLM 호출 실패: {e}")
@@ -1226,13 +1716,8 @@ class BakeryExpertRAG:
             )
 
     def _infer_query_type(self, query: str) -> str:
-        """
-        질의가 '추천/코스' 인지, '지식/설명' 인지 구분.
-        - return "recommend" 또는 "knowledge"
-        """
         q = query.strip()
 
-        # 1) 추천/코스 의도 키워드
         recommend_keywords = [
             "추천해줘", "추천해 주세요", "추천해주세요",
             "맛집", "빵집 추천", "코스", "빵지순례",
@@ -1243,7 +1728,6 @@ class BakeryExpertRAG:
             if kw in q:
                 return "recommend"
 
-        # 2) 정보/지식 의도 키워드 (설명, 종류, 차이점 등)
         knowledge_keywords = [
             "어떤 종류", "종류가 있나요", "종류는?", "종류 알려줘",
             "차이점", "차이가 뭐야", "차이가 뭔가요",
@@ -1254,12 +1738,9 @@ class BakeryExpertRAG:
             if kw in q:
                 return "knowledge"
 
-        # 3) 질문 끝이 ? 이면서 '맛집/추천/코스/빵지순례'가 없으면
-        #    정보 질문일 가능성이 더 높다고 보고 knowledge 로 처리
         if "?" in q and "맛집" not in q and "추천" not in q and "코스" not in q:
             return "knowledge"
 
-        # 기본값: 추천 모드
         return "recommend"
 
 
@@ -1275,6 +1756,20 @@ def _safe_get_rating(bakery: Dict[str, Any]) -> float:
             return float(str(raw).replace(",", ""))
         except Exception:
             return 0.0
+
+
+def build_menu_focus_sentence(menu_keywords: List[str], has_menu_focus: bool) -> str:
+    if has_menu_focus and menu_keywords:
+        main_keywords = menu_keywords[:3]
+        kw_text = " / ".join(main_keywords)
+        return (
+            f"- '{kw_text}' 관련 키워드가 많이 언급된 매장을 먼저 추린 뒤, "
+            "그중에서 평점과 리뷰 수(인기도)를 기준으로 1차 랭킹을 했습니다."
+        )
+    else:
+        return (
+            "- 전체 빵집 중에서 평점과 리뷰 수(인기도)를 기준으로 1차 랭킹을 했습니다."
+        )
 
 
 if __name__ == "__main__":

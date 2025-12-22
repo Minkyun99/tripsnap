@@ -148,7 +148,7 @@ pydantic==2.11.7
 pydantic_core==2.33.2
 pydeck==0.9.1
 Pygments==2.19.2
-PyJWT==2.10.0
+PyJWT==2.10.1
 pyOpenSSL==25.3.0
 pyparsing==3.2.3
 PyPika==0.48.9

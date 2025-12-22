@@ -2,6 +2,55 @@
 
 from typing import Any, Dict, List, Tuple
 import math
+from math import radians, sin, cos, sqrt, atan2
+from schemas import TransportMode
+
+EARTH_RADIUS_KM = 6371.0
+
+def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """
+    두 좌표 사이의 대략적인 직선 거리(km).
+    이미 구현돼 있다면 기존 함수를 사용하세요.
+    """
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return EARTH_RADIUS_KM * c
+
+def estimate_walk_time_minutes(distance_km: float, walk_speed_kmph: float = 4.0) -> float:
+    """
+    도보 이동 시간(분) 근사. 기본 보행 속도 4km/h.
+    """
+    if distance_km <= 0:
+        return 0.0
+    return (distance_km / walk_speed_kmph) * 60.0
+
+def estimate_transit_time_minutes(distance_km: float, mode: TransportMode) -> float:
+    """
+    지하철/버스 이동 시간(분)을 단순 직선거리 기반으로 근사.
+
+    - 지하철: 평균 30km/h 가정
+    - 버스: 평균 20km/h 가정
+    - 혼합: 둘 중 작은 값 사용
+    """
+    if distance_km <= 0:
+        return 0.0
+
+    if mode == TransportMode.SUBWAY:
+        speed = 30.0
+    elif mode == TransportMode.BUS:
+        speed = 20.0
+    elif mode == TransportMode.TRANSIT_MIXED:
+        # 단순화: 지하철 vs 버스 중 더 빠른 쪽
+        speed = 25.0
+    else:
+        # 도보/자차는 여기서 다루지 않음
+        speed = 25.0
+
+    return (distance_km / speed) * 60.0
+
 
 
 def _safe_rating(bakery: Dict[str, Any]) -> float:
