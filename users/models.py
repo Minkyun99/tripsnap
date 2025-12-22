@@ -12,9 +12,7 @@ class User(AbstractUser):
     - id (PK), password, date_joined (created_at) 필드가 기본 포함됩니다.
     - email 필드는 unique=True로 설정하여 소셜 로그인에서 핵심 식별자로 사용합니다.
     """
-    
 
-    # 소셜 로그인의 경우 username이 없을 수 있으므로 null=True, blank=True 허용
     username = models.CharField(
         _("사용자명"),
         max_length=150,
@@ -23,7 +21,6 @@ class User(AbstractUser):
         null=True,
     )
 
-    # 이메일을 고유 값으로 사용
     email = models.EmailField(
         _("이메일 주소"),
         unique=True,
@@ -31,7 +28,6 @@ class User(AbstractUser):
         blank=False,
     )
 
-    # 회원가입 시 랜덤으로 자동 생성되는 닉네임
     nickname = models.CharField(
         _("닉네임"),
         max_length=30,
@@ -52,15 +48,22 @@ class User(AbstractUser):
         default=FollowVisibility.PUBLIC,
     )
 
-    USERNAME_FIELD = 'email'  # ✅ 이메일로 로그인
-    REQUIRED_FIELDS = []  # ✅ email이 USERNAME_FIELD이므로 비워둠
+    # ✅ 사용자별 키워드 프로필 (모델_ver11 결과 저장용)
+    # 예: ["소금빵", "크루아상", "바삭한", "촉촉한", ...]
+    keywords = models.JSONField(   # 위에서 from django.db.models import JSONField 를 사용했다면 JSONField로
+        _("선호 키워드"),
+        default=list,
+        blank=True,
+    )
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
 
     class Meta:
         verbose_name = _("사용자")
         verbose_name_plural = _("사용자 목록")
 
     def __str__(self):
-        # 기존 코드에 set 을 반환하는 버그가 있어서 문자열 하나만 반환하도록 수정
         return self.nickname or self.username or self.email or "Unknown User"
 
 

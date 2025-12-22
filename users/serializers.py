@@ -24,8 +24,8 @@ class UserSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = User
-        fields = ['id', 'email', 'username', 'nickname']
-        read_only_fields = ['id', 'email', 'username', 'nickname']
+        fields = ['id', 'email', 'username', 'nickname', 'keywords']
+        read_only_fields = ['id', 'email', 'username', 'nickname', 'keywords']
 
 _ADJECTIVES = [
     "따뜻한", "뜨거운", "갓구운", "신선한", "폭신한", "보송보송한", "쫄깃한", "바삭한",

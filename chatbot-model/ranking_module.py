@@ -7,7 +7,11 @@ from schemas import LocationFilter, TransportMode
 from ranking_utils import (
     haversine_distance_km,
     estimate_walk_time_minutes,
+    estimate_transit_time_minutes,
+    _safe_rating,
 )
+
+
 
 from location_module import (
     find_nearest_subway_station,
@@ -75,17 +79,13 @@ def build_review_stats_cache(bakeries: List[Dict[str, Any]]) -> Dict[str, Tuple[
 
 
 def _parse_rating(bakery: Dict[str, Any]) -> float:
-    rating_info = bakery.get("rating") or {}
-    raw = rating_info.get("naver_rate") or rating_info.get("kakao_rate")
-    if not raw:
-        return 0.0
-    try:
-        return float(raw)
-    except Exception:
-        try:
-            return float(str(raw).replace(",", ""))
-        except Exception:
-            return 0.0
+    """
+    rating 구조는 ranking_utils._safe_rating 에서 일괄 처리한다.
+    여기서는 단순히 래핑만 해서 사용.
+    """
+    return _safe_rating(bakery)
+
+
 
 
 def compute_popularity_score(
