@@ -1,8 +1,8 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useProfileStore } from '../../stores/profile'
 
-// ✨ props 추가 - 미리 채워진 제목/내용 (선택적)
+// ✨ props 추가 - 미리 채워진 제목/내용 + 빵집 위치 데이터
 const props = defineProps({
   prefilledTitle: {
     type: String,
@@ -11,6 +11,10 @@ const props = defineProps({
   prefilledContent: {
     type: String,
     default: ''
+  },
+  bakeryLocations: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -25,6 +29,9 @@ const previewUrls = ref([])   // 미리보기 URL을 담을 배열
 const isLoading = ref(false)
 const error = ref('')
 
+// ✨ 카카오 지도 관련
+const mapContainer = ref(null)
+
 // ✨ 컴포넌트 마운트 시 미리 채워진 내용 설정 (있을 경우에만)
 onMounted(() => {
   if (props.prefilledTitle) {
@@ -33,7 +40,144 @@ onMounted(() => {
   if (props.prefilledContent) {
     content.value = props.prefilledContent
   }
+  
+  // ✨ 빵집 위치 데이터가 있으면 카카오 지도 로드
+  if (props.bakeryLocations && props.bakeryLocations.length > 0) {
+    loadKakaoMap()
+  }
 })
+
+// ✨ 카카오 지도 로드 및 마커 표시
+const loadKakaoMap = () => {
+  console.log('🗺️ 카카오맵 로드 시작')
+  
+  // index.html에서 이미 로드되었다고 가정
+  if (window.kakao && window.kakao.maps) {
+    console.log('✅ 카카오맵 SDK 사용 가능')
+    
+    // services가 로드되었는지 확인
+    if (window.kakao.maps.load) {
+      window.kakao.maps.load(() => {
+        console.log('✅ 카카오맵 API 로드 완료')
+        initMap()
+      })
+    } else {
+      initMap()
+    }
+  } else {
+    console.error('❌ 카카오맵 SDK가 로드되지 않았습니다. index.html을 확인하세요.')
+    console.error('💡 index.html에 다음 스크립트를 추가하세요:')
+    console.error('<' + 'script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KEY&libraries=services"><' + '/script>')
+  }
+}
+
+// ✨ 지도 초기화 및 마커 표시
+const initMap = () => {
+  if (!mapContainer.value) {
+    console.error('❌ 지도 컨테이너가 없습니다')
+    return
+  }
+
+  const kakao = window.kakao
+  
+  if (!kakao || !kakao.maps) {
+    console.error('❌ 카카오맵 SDK가 없습니다')
+    return
+  }
+  
+  console.log('🗺️ 지도 초기화 시작')
+  console.log('📍 빵집 데이터:', props.bakeryLocations)
+  
+  // 지도 옵션
+  const mapOption = {
+    center: new kakao.maps.LatLng(36.3504, 127.3845), // 대전 중심
+    level: 7
+  }
+  
+  // 지도 생성
+  const map = new kakao.maps.Map(mapContainer.value, mapOption)
+  
+  // Geocoder 초기화
+  if (!kakao.maps.services || !kakao.maps.services.Geocoder) {
+    console.error('❌ Geocoder를 사용할 수 없습니다')
+    console.error('💡 index.html에서 libraries=services를 확인하세요')
+    return
+  }
+  
+  const geocoder = new kakao.maps.services.Geocoder()
+  console.log('✅ Geocoder 초기화 완료')
+  
+  // 마커를 표시할 위치 배열
+  const positions = []
+  let geocodeCount = 0
+  const totalBakeries = props.bakeryLocations.length
+  
+  // 각 빵집에 대해 주소를 좌표로 변환
+  props.bakeryLocations.forEach((bakery, index) => {
+    const name = bakery.name || bakery.place_name || '빵집'
+    const address = bakery.road_address || bakery.jibun_address || bakery.address
+    
+    console.log(`📍 [${index + 1}] ${name}:`, address)
+    
+    if (!address) {
+      console.warn(`⚠️ [${index + 1}] ${name}: 주소가 없습니다`)
+      geocodeCount++
+      return
+    }
+    
+    // 주소로 좌표 검색
+    geocoder.addressSearch(address, function(result, status) {
+      geocodeCount++
+      
+      if (status === kakao.maps.services.Status.OK) {
+        console.log(`✅ [${index + 1}] ${name} 좌표:`, result[0].y, result[0].x)
+        
+        const coords = new kakao.maps.LatLng(result[0].y, result[0].x)
+        
+        positions.push({
+          title: `${index + 1}. ${name}`,
+          latlng: coords
+        })
+        
+        // 마커 생성
+        const marker = new kakao.maps.Marker({
+          map: map,
+          position: coords,
+          title: name
+        })
+        
+        // 인포윈도우 생성
+        const infowindow = new kakao.maps.InfoWindow({
+          content: `<div style="padding:5px 10px;font-size:12px;font-weight:bold;white-space:nowrap;">${index + 1}. ${name}</div>`
+        })
+        
+        // 마커 이벤트
+        kakao.maps.event.addListener(marker, 'mouseover', function() {
+          infowindow.open(map, marker)
+        })
+        
+        kakao.maps.event.addListener(marker, 'mouseout', function() {
+          infowindow.close()
+        })
+        
+        kakao.maps.event.addListener(marker, 'click', function() {
+          infowindow.open(map, marker)
+        })
+        
+        // 모든 마커 처리 완료 시 지도 범위 조정
+        if (geocodeCount === totalBakeries && positions.length > 0) {
+          const bounds = new kakao.maps.LatLngBounds()
+          positions.forEach(pos => bounds.extend(pos.latlng))
+          map.setBounds(bounds)
+          console.log(`✅ 지도 범위 조정 완료 - 총 ${positions.length}개 마커`)
+        }
+        
+      } else {
+        console.error(`❌ [${index + 1}] ${name} Geocoding 실패:`, status)
+      }
+    })
+  })
+}
 
 // 파일 선택 창 열기
 function openFilePicker() {
@@ -139,7 +283,14 @@ async function submit() {
         @change="onPick"
       />
 
-      <div class="ts-image-section">
+      <!-- ✨ 공유 모드: 카카오 지도 표시 -->
+      <div v-if="bakeryLocations && bakeryLocations.length > 0" class="ts-map-section">
+        <label class="ts-label">📍 추천 빵집 위치 ({{ bakeryLocations.length }}곳)</label>
+        <div ref="mapContainer" class="ts-map-container"></div>
+      </div>
+
+      <!-- 일반 모드: 이미지 업로드 -->
+      <div v-else class="ts-image-section">
         <label class="ts-label">이미지 ({{ selectedFiles.length }})</label>
         <div class="ts-preview-grid">
           <div v-for="(url, index) in previewUrls" :key="index" class="ts-preview-box">
@@ -190,7 +341,7 @@ $ts-pink-hover: #ff1493;
   padding: 1rem;
   display: grid;
   place-items: center;
-  z-index: 60;
+  z-index: 1000; /* 더 높은 z-index */
 }
 
 .ts-create-modal {
@@ -200,6 +351,8 @@ $ts-pink-hover: #ff1493;
   border: 4px solid $ts-border-brown;
   padding: 1.25rem;
   box-shadow: 0 26px 70px rgba(0, 0, 0, 0.22);
+  position: relative;
+  z-index: 1001; /* 오버레이보다 높게 */
 }
 
 .ts-title {
@@ -228,6 +381,21 @@ $ts-pink-hover: #ff1493;
 /* 이미지 그리드 레이아웃 */
 .ts-image-section {
   margin-bottom: 1.25rem;
+}
+
+/* ✨ 카카오 지도 스타일 */
+.ts-map-section {
+  margin-bottom: 1.25rem;
+}
+
+.ts-map-container {
+  width: 100%;
+  height: 300px;
+  border: 2px solid $ts-border-brown;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1; /* 지도를 낮은 z-index로 */
 }
 
 .ts-preview-grid {
@@ -300,6 +468,8 @@ $ts-pink-hover: #ff1493;
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
+  position: relative;
+  z-index: 10; /* 버튼을 높은 z-index로 */
 }
 
 .ts-btn {
