@@ -1,15 +1,30 @@
 <template>
-  <div class="bakery-overlay" @click.self="emit('close')">
+  <!-- store.modalOpen && store.modalBakery 가 있을 때만 렌더 -->
+  <div
+    v-if="bakeryStore.modalOpen && bakery"
+    class="bakery-overlay"
+    @click.self="bakeryStore.closeModal()"
+  >
     <div class="bakery-modal">
-      <button class="bakery-modal-close" type="button" @click="emit('close')">✕</button>
+      <button
+        class="bakery-modal-close"
+        type="button"
+        @click="bakeryStore.closeModal()"
+      >
+        ✕
+      </button>
 
       <div class="bakery-modal-grid">
         <!-- 왼쪽: 지도 영역 -->
         <div class="bakery-modal-left">
           <div class="bakery-map-container">
             <!-- 위도/경도가 있으면 카카오 지도 표시 -->
-            <div v-if="bakery?.latitude && bakery?.longitude" ref="mapContainer" class="kakao-map"></div>
-            
+            <div
+              v-if="bakery?.latitude && bakery?.longitude"
+              ref="mapContainer"
+              class="kakao-map"
+            ></div>
+
             <!-- 위도/경도가 없으면 안내 메시지 -->
             <div v-else class="bakery-map-placeholder">
               <span class="map-icon">🗺️</span>
@@ -22,7 +37,7 @@
           <!-- 빵집 기본 정보 -->
           <div class="bakery-info-section">
             <h2 class="bakery-name">{{ bakery?.name || '빵집 이름' }}</h2>
-            
+
             <div class="bakery-meta">
               <div v-if="bakery?.category" class="bakery-category">
                 🏷️ {{ bakery.category }}
@@ -33,19 +48,25 @@
             </div>
 
             <!-- 평점 -->
-            <div v-if="bakery?.naver_rate || bakery?.kakao_rate" class="bakery-rating">
-              <span v-if="bakery.naver_rate" class="rating-item">
-                ⭐ 네이버 {{ bakery.naver_rate }}
-              </span>
-              <span v-if="bakery.kakao_rate" class="rating-item">
-                ⭐ 카카오 {{ bakery.kakao_rate }}
+            <div
+              v-if="bakery?.rate"
+              class="bakery-rating"
+            >
+              <span v-if="bakery.rate" class="rating-item">
+                ⭐ tripsnap 평점 {{ bakery.rate }}
               </span>
             </div>
 
             <!-- 주소 -->
             <div class="bakery-detail-item">
               <span class="detail-label">📍 주소</span>
-              <span class="detail-value">{{ bakery?.road_address || bakery?.jibun_address || '주소 정보 없음' }}</span>
+              <span class="detail-value">
+                {{
+                  bakery?.road_address ||
+                  bakery?.jibun_address ||
+                  '주소 정보 없음'
+                }}
+              </span>
             </div>
 
             <!-- 전화번호 -->
@@ -90,12 +111,12 @@
             </div>
 
             <!-- 키워드 -->
-            <div v-if="bakery?.keywords" class="bakery-keywords">
+            <div v-if="keywordList.length" class="bakery-keywords">
               <span class="detail-label">🏷️ 특징</span>
               <div class="keywords-list">
-                <span 
-                  v-for="(keyword, idx) in keywordList" 
-                  :key="idx" 
+                <span
+                  v-for="(keyword, idx) in keywordList"
+                  :key="idx"
                   class="keyword-tag"
                 >
                   {{ keyword }}
@@ -104,10 +125,10 @@
             </div>
 
             <!-- 지도 보기 버튼 -->
-            <a 
-              v-if="bakery?.url" 
-              :href="bakery.url" 
-              target="_blank" 
+            <a
+              v-if="bakery?.url"
+              :href="bakery.url"
+              target="_blank"
               class="map-link-button"
             >
               🗺️ 네이버 지도에서 보기
@@ -123,22 +144,26 @@
               class="bakery-like-button"
               :class="bakery?.is_liked ? 'bakery-like-button--on' : ''"
               type="button"
-              @click="emit('toggle-like')"
+              @click="bakeryStore.toggleLike()"
             >
-              <span class="like-icon">{{ bakery?.is_liked ? '❤️' : '🤍' }}</span>
+              <span class="like-icon">
+                {{ bakery?.is_liked ? '❤️' : '🤍' }}
+              </span>
               <span class="like-count">{{ bakery?.like_count ?? 0 }}</span>
             </button>
           </div>
 
           <!-- 댓글 섹션 -->
           <div class="bakery-comments-section">
-            <p class="comments-title">💬 댓글 {{ comments.length }}개</p>
+            <p class="comments-title">
+              💬 댓글 {{ comments.length }}개
+            </p>
 
             <div class="comments-list">
               <div v-for="c in comments" :key="c.id" class="comment-item">
                 <div class="comment-header">
-                  <span 
-                    class="comment-author" 
+                  <span
+                    class="comment-author"
                     @click="emit('go-profile', c.writer_nickname)"
                   >
                     @{{ c.writer_nickname }}
@@ -161,9 +186,9 @@
                 placeholder="댓글을 입력하세요..."
                 @keydown.enter.prevent="submitComment"
               />
-              <button 
-                class="comment-submit-button" 
-                type="button" 
+              <button
+                class="comment-submit-button"
+                type="button"
                 @click="submitComment"
               >
                 게시
@@ -178,75 +203,98 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
+import { useBakeryStore } from '@/stores/bakery'
 
-const props = defineProps({
-  bakery: { type: Object, default: null },
-  comments: { type: Array, default: () => [] },
-})
+const bakeryStore = useBakeryStore()
 
-const emit = defineEmits([
-  'close',
-  'toggle-like',
-  'submit-comment', // (content)
-  'go-profile', // (nickname)
-])
+// Pinia에서 상태 가져오기
+const bakery = computed(() => bakeryStore.modalBakery)
+const comments = computed(() => bakeryStore.modalComments)
+const isOpen = computed(() => bakeryStore.modalOpen)
+
+const emit = defineEmits(['go-profile'])
 
 const commentInput = ref('')
 const mapContainer = ref(null)
 let kakaoMap = null
 let kakaoMarker = null
-let mapInitRetryCount = 0  // 재시도 횟수
-const MAX_RETRY = 10  // 최대 재시도 횟수
+let mapInitRetryCount = 0
+const MAX_RETRY = 10
 
-// 영업시간이 있는지 확인
+// 영업시간 존재 여부
 const hasBusinessHours = computed(() => {
-  return props.bakery?.monday || 
-         props.bakery?.tuesday || 
-         props.bakery?.wednesday || 
-         props.bakery?.thursday || 
-         props.bakery?.friday || 
-         props.bakery?.saturday || 
-         props.bakery?.sunday
+  const b = bakery.value
+  if (!b) return false
+  return (
+    b.monday ||
+    b.tuesday ||
+    b.wednesday ||
+    b.thursday ||
+    b.friday ||
+    b.saturday ||
+    b.sunday
+  )
 })
 
-// 키워드 리스트 (쉼표로 구분된 문자열을 배열로 변환)
+// 키워드 리스트 (배열/문자열 모두 대응)
 const keywordList = computed(() => {
-  if (!props.bakery?.keywords) return []
-  return props.bakery.keywords
+  const b = bakery.value
+  if (!b || !b.keywords) return []
+
+  if (Array.isArray(b.keywords)) {
+    return b.keywords.filter((k) => !!k && k.trim().length > 0)
+  }
+
+  return String(b.keywords)
     .split(',')
-    .map(k => k.trim())
-    .filter(k => k.length > 0)
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0)
 })
 
 // 카카오 지도 초기화
 const initKakaoMap = () => {
   console.log('=== 카카오 지도 초기화 시도 ===')
-  
-  // 위도/경도가 없으면 초기화하지 않음 (플레이스홀더 표시)
-  if (!props.bakery?.latitude || !props.bakery?.longitude) {
-    console.warn('⚠️ 위도/경도 정보가 없습니다. 지도 미제공 메시지를 표시합니다.')
+
+  const b = bakery.value
+  if (!b) {
+    // 아직 선택된 베이커리가 없음
     return
   }
 
+  // latitude / longitude 또는 lat / lng 둘 다 대응
+  const latRaw = b.latitude ?? b.lat
+  const lngRaw = b.longitude ?? b.lng
+
+  if (!latRaw || !lngRaw) {
+    // 실제로 좌표가 없는 빵집인 경우 (정상적인 시나리오)
+    console.warn('⚠️ 위도/경도 정보 없음 → 지도 미표시')
+    return
+  }
+
+  const lat = parseFloat(latRaw)
+  const lng = parseFloat(lngRaw)
+
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    console.warn('⚠️ 위도/경도 값이 숫자가 아닙니다:', latRaw, lngRaw)
+    return
+  }
+
+  // Kakao SDK 로딩 대기
   if (!window.kakao) {
     mapInitRetryCount++
     console.warn(`⏳ 카카오 SDK 로드 대기 중... (${mapInitRetryCount}/${MAX_RETRY})`)
-    
+
     if (mapInitRetryCount >= MAX_RETRY) {
       console.error('❌ 카카오 SDK 로드 실패')
       return
     }
-    
+
     setTimeout(() => {
       initKakaoMap()
     }, 500)
     return
   }
 
-  console.log('✅ window.kakao 발견!')
-  console.log('window.kakao:', window.kakao)
-  
-  // kakao.maps가 없으면 기다림
   if (!window.kakao.maps) {
     console.warn('⏳ kakao.maps 로딩 중...')
     setTimeout(() => {
@@ -255,50 +303,39 @@ const initKakaoMap = () => {
     return
   }
 
-  console.log('✅ kakao.maps 발견!')
   mapInitRetryCount = 0
 
+  // DOM 업데이트 이후에 컨테이너 접근
   nextTick(() => {
     if (!mapContainer.value) {
-      console.error('❌ 지도 컨테이너를 찾을 수 없습니다.')
+      console.error('❌ 지도 컨테이너 없음')
       return
     }
 
     try {
-      const lat = parseFloat(props.bakery.latitude)
-      const lng = parseFloat(props.bakery.longitude)
+      const center = new window.kakao.maps.LatLng(lat, lng)
 
-      console.log('좌표:', { lat, lng })
-
-      // 지도 중심 좌표
-      const mapCenter = new window.kakao.maps.LatLng(lat, lng)
-
-      // 지도 옵션
       const mapOption = {
-        center: mapCenter,
+        center,
         level: 3,
       }
 
-      // 지도 생성
       kakaoMap = new window.kakao.maps.Map(mapContainer.value, mapOption)
 
-      // 지도 크기 재조정 (필수!)
+      // 크기 재조정
       setTimeout(() => {
-        kakaoMap.relayout()
+        kakaoMap && kakaoMap.relayout()
       }, 100)
 
-      // 마커 생성
       kakaoMarker = new window.kakao.maps.Marker({
-        position: mapCenter,
+        position: center,
         map: kakaoMap,
       })
 
-      // 인포윈도우 생성
       const infowindow = new window.kakao.maps.InfoWindow({
-        content: `<div style="padding:5px;font-size:12px;text-align:center;width:150px;">${props.bakery.name}</div>`,
+        content: `<div style="padding:5px;font-size:12px;text-align:center;width:150px;">${b.name}</div>`,
       })
 
-      // 마커에 인포윈도우 표시
       infowindow.open(kakaoMap, kakaoMarker)
 
       console.log('✅ 카카오 지도 초기화 완료')
@@ -308,31 +345,87 @@ const initKakaoMap = () => {
   })
 }
 
-// 모달이 열릴 때마다 댓글 입력 초기화 & 지도 초기화
+// 1) 베이커리가 바뀔 때: 입력/리트라이 초기화만
 watch(
-  () => props.bakery,
-  (newBakery) => {
+  () => bakery.value,
+  () => {
     commentInput.value = ''
-    mapInitRetryCount = 0  // 재시도 카운터 리셋
-    
-    if (newBakery) {
-      // 지도 초기화
+    mapInitRetryCount = 0
+    // 여기서는 지도 바로 초기화 X (모달 오픈 여부와 타이밍 문제 때문)
+  },
+)
+
+// 2) 모달이 열릴 때(isOpen → true) + 베이커리가 있는 경우에만 지도 초기화
+watch(
+  () => isOpen.value,
+  (open) => {
+    if (open && bakery.value) {
       initKakaoMap()
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 
-function submitComment() {
+// 모달 닫기
+const closeModal = () => {
+  bakeryStore.closeModal()
+}
+
+// 좋아요 토글
+const toggleLike = () => {
+  bakeryStore.toggleLike()
+}
+
+// 댓글 작성
+const submitComment = () => {
   const content = commentInput.value.trim()
   if (!content) return
-  emit('submit-comment', content)
+  bakeryStore.submitComment(content)
   commentInput.value = ''
+}
+
+// 프로필로 이동 (부모 라우터로 전달)
+const goProfile = (nickname) => {
+  emit('go-profile', nickname)
 }
 </script>
 
 <style scoped lang="scss">
 @use 'sass:color';
+
+$ts-border-brown: #d2691e;
+$ts-text-brown: #8b4513;
+$ts-bg-cream: #fffaf0;
+
+/* 오버레이 */
+.bakery-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+/* 모달 */
+.bakery-modal {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  max-height: 90vh;
+  background: white;
+  border-radius: 1.5rem;
+  border: 4px solid $ts-border-brown;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
 $ts-border-brown: #d2691e;
 $ts-text-brown: #8b4513;

@@ -5,7 +5,6 @@ from datetime import datetime, time
 from typing import Any, Dict, List, Tuple, Optional
 
 import chromadb
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
 from schemas import DateTimeConstraint, LocationFilter, TransportMode
 
@@ -44,7 +43,6 @@ from ranking_utils import (
 )
 
 
-
 try:
     from openai import OpenAI
 except ImportError:
@@ -54,6 +52,7 @@ try:
     import requests
 except ImportError:
     requests = None
+
 
 # ==================================================
 #  대전 1호선 역 순서 (동선 최적화용 메타데이터)
@@ -111,6 +110,78 @@ def infer_line_direction(visited_stations):
     if indices[-1] < indices[0]:
         return -1
     return 0
+
+
+# ==================================================
+#  Upstage Embedding 클라이언트
+#   - sentence-transformers / torch 제거용
+#   - 문서/쿼리 임베딩을 Upstage Embedding API로 생성
+# ==================================================
+
+class UpstageEmbeddingClient:
+    """
+    Upstage(https://api.upstage.ai/v1) Embedding API 래퍼.
+
+    - query:  solar-embedding-1-large-query
+    - passage: solar-embedding-1-large-passage
+
+    UPSTAGE_API_KEY 환경변수를 사용합니다.
+    """
+
+    def __init__(self, api_key: Optional[str] = None):
+        if OpenAI is None:
+            raise RuntimeError(
+                "openai 패키지가 필요합니다. "
+                "pip install openai 후 사용해 주세요."
+            )
+
+        key = (api_key or os.getenv("UPSTAGE_API_KEY", "")).strip()
+        if not key:
+            raise RuntimeError(
+                "UPSTAGE_API_KEY 가 설정되어 있지 않습니다. "
+                "Upstage 콘솔에서 API 키를 발급 후 환경변수에 설정해 주세요."
+            )
+
+        # Upstage는 OpenAI 호환 API이므로 base_url만 바꿔서 사용
+        self.client = OpenAI(
+            api_key=key,
+            base_url="https://api.upstage.ai/v1",
+        )
+
+        # 필요 시 환경변수로 오버라이드 가능
+        self.query_model = os.getenv(
+            "UPSTAGE_EMBED_QUERY_MODEL",
+            "solar-embedding-1-large-query",
+        )
+        self.doc_model = os.getenv(
+            "UPSTAGE_EMBED_DOC_MODEL",
+            "solar-embedding-1-large-passage",
+        )
+
+    def embed_query(self, text: str) -> List[float]:
+        """
+        검색 쿼리용 임베딩 (Query 모델 사용)
+        """
+        if not text:
+            text = " "
+        resp = self.client.embeddings.create(
+            model=self.query_model,
+            input=text,
+        )
+        return resp.data[0].embedding
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """
+        문서(빵집 설명 등)용 임베딩 (Passage 모델 사용)
+        - 대량 인덱싱용으로 사용할 수 있음
+        """
+        if not texts:
+            return []
+        resp = self.client.embeddings.create(
+            model=self.doc_model,
+            input=texts,
+        )
+        return [d.embedding for d in resp.data]
 
 
 class BakeryExpertRAG:
@@ -184,17 +255,28 @@ class BakeryExpertRAG:
             if name:
                 self.bakery_by_name[name] = b
 
-        # ---------- 벡터 DB (Chroma + HF 임베딩) ----------
-        print("📦 임베딩 모델 로드 중: jhgan/ko-sroberta-multitask")
-        self.embedding_fn = SentenceTransformerEmbeddingFunction(
-            model_name="jhgan/ko-sroberta-multitask"
-        )
+        # ---------- Upstage Embedding 클라이언트 ----------
+        self.embedding_client: Optional[UpstageEmbeddingClient] = None
+        if OpenAI is not None:
+            try:
+                self.embedding_client = UpstageEmbeddingClient()
+                print(
+                    "🧮 Upstage Embedding 클라이언트 초기화 완료 "
+                    "(solar-embedding-1-large-query / passage)"
+                )
+            except Exception as e:
+                print(f"⚠️ Upstage Embedding 초기화 실패: {e}")
+        else:
+            print("⚠️ openai 패키지 미설치 – Upstage Embedding 사용 불가 (벡터 검색 비활성화)")
 
-        print(f"💾 벡터 DB 초기화: {os.path.abspath(self.vectordb_path)}")
+        # ---------- 벡터 DB (Chroma, embedding_function 없이 사용) ----------
+        print("📦 Chroma 벡터 DB 연결 (기존 인덱스 사용)")
+        print(f"💾 벡터 DB 경로: {os.path.abspath(self.vectordb_path)}")
         self.chroma_client = chromadb.PersistentClient(path=self.vectordb_path)
+        # embedding_function 을 지정하지 않고, query_embeddings 를 직접 전달
         self.bakery_collection = self.chroma_client.get_or_create_collection(
             name="bakery_collection",
-            embedding_function=self.embedding_fn,
+            metadata={"hnsw:space": "cosine"},
         )
         print("✅ 빵집 컬렉션 연결: bakery_collection")
 
@@ -207,7 +289,7 @@ class BakeryExpertRAG:
             self.review_collection = None
             print("⚠️ review_collection 조회 실패 – 빵집 컬렉션만 사용합니다.")
 
-        # ---------- LLM (선택: 재랭킹/지식 모드) ----------
+        # ---------- LLM (재랭킹/지식 모드) ----------
         self.llm_client = None
         api_key = os.getenv("UPSTAGE_API_KEY", "up_eF6eMmmYAQTpSHqAaRNSJ5wJ9Sm1B").strip()
         if api_key and OpenAI is not None:
@@ -239,7 +321,7 @@ class BakeryExpertRAG:
         self.known_flagship_names: List[str] = []
 
     # ==============================
-    #  벡터 검색
+    #  벡터 검색 (Upstage 임베딩 사용)
     # ==============================
 
     def _vector_search_bakeries(
@@ -247,14 +329,27 @@ class BakeryExpertRAG:
         queries: List[str],
         top_k: int = 60,
     ) -> List[Dict[str, Any]]:
+        """
+        - 기존: SentenceTransformerEmbeddingFunction + query_texts
+        - 변경: Upstage Embedding API로 쿼리 임베딩 생성 후 query_embeddings 로 검색
+        """
         if self.bakery_collection is None:
             return list(self.bakeries)
 
+        if self.embedding_client is None:
+            # 임베딩 사용 불가 시 전체 데이터로 fallback
+            print("⚠️ Upstage Embedding 클라이언트 없음 → 전체 데이터 fallback")
+            return list(self.bakeries)
+
         slug_scores: Dict[str, float] = {}
+
         for q in queries:
             try:
+                # 쿼리 문장을 Upstage Query 모델로 임베딩
+                q_vec = self.embedding_client.embed_query(q)
+
                 res = self.bakery_collection.query(
-                    query_texts=[q],
+                    query_embeddings=[q_vec],
                     n_results=top_k,
                 )
             except Exception as e:
@@ -272,6 +367,7 @@ class BakeryExpertRAG:
                     slug = slug[0]
                 if not isinstance(slug, str):
                     continue
+                # Chroma 기본은 "distance" = 1 - cosine_sim 또는 유사 metric
                 score = -float(dist) if dist is not None else 0.0
                 if slug in slug_scores:
                     slug_scores[slug] = max(slug_scores[slug], score)
@@ -1631,35 +1727,6 @@ class BakeryExpertRAG:
 
         return "\n".join(lines)
 
-    # ==============================
-    #  인터랙티브 모드
-    # ==============================
-
-    def interactive(self):
-        print("============================================================")
-        print("💬 빵집 추천 전문가와 대화하기")
-        print("   (위치 + 리뷰빈도 + 영업시간 + 동선 + 대기시간 + 벡터DB)")
-        print("============================================================\n")
-        print("안녕하세요! 30년 제빵 경력의 빵집 전문가입니다.")
-        print("원하시는 빵 종류, 맛/식감, 분위기, 동네/역 이름, 여행 기간, 방문 시간, 이동 수단 등을 자유롭게 말씀해 주세요.")
-        print("예)")
-        print("  - '대전역 근처 휘낭시에 맛집 추천해줘'")
-        print("  - '지금 바로 대전역 근처에서 갈 수 있는 빵집 추천해줘'")
-        print("  - '시간 상관 없이 대전 대표 빵집 하루 코스 짜줘'")
-        print("(종료: quit / exit / 종료)\n")
-
-        while True:
-            q = input("🤔 질문: ").strip()
-            if q.lower() in ["quit", "exit"] or q in ["종료"]:
-                print("종료합니다.")
-                break
-            if not q:
-                continue
-            answer = self.answer_query(q)
-            print()
-            print(answer)
-            print()
-
     # =======================================================
     # 빵 관련 지식 모드
     # =======================================================
@@ -1746,6 +1813,35 @@ class BakeryExpertRAG:
 
         return "recommend"
 
+    # ==============================
+    #  인터랙티브 모드
+    # ==============================
+
+    def interactive(self):
+        print("============================================================")
+        print("💬 빵집 추천 전문가와 대화하기")
+        print("   (위치 + 리뷰빈도 + 영업시간 + 동선 + 대기시간 + 벡터DB)")
+        print("============================================================\n")
+        print("안녕하세요! 30년 제빵 경력의 빵집 전문가입니다.")
+        print("원하시는 빵 종류, 맛/식감, 분위기, 동네/역 이름, 여행 기간, 방문 시간, 이동 수단 등을 자유롭게 말씀해 주세요.")
+        print("예)")
+        print("  - '대전역 근처 휘낭시에 맛집 추천해줘'")
+        print("  - '지금 바로 대전역 근처에서 갈 수 있는 빵집 추천해줘'")
+        print("  - '시간 상관 없이 대전 대표 빵집 하루 코스 짜줘'")
+        print("(종료: quit / exit / 종료)\n")
+
+        while True:
+            q = input("🤔 질문: ").strip()
+            if q.lower() in ["quit", "exit"] or q in ["종료"]:
+                print("종료합니다.")
+                break
+            if not q:
+                continue
+            answer = self.answer_query(q)
+            print()
+            print(answer)
+            print()
+
 
 def _safe_get_rating(bakery: Dict[str, Any]) -> float:
     """
@@ -1756,9 +1852,6 @@ def _safe_get_rating(bakery: Dict[str, Any]) -> float:
         return float(_safe_rating(bakery))
     except Exception:
         return 0.0
-
-
-
 
 
 def build_menu_focus_sentence(menu_keywords: List[str], has_menu_focus: bool) -> str:

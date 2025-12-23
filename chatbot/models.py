@@ -93,8 +93,7 @@ class Bakery(models.Model):
     longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, verbose_name="경도")
     
     # 평점 (JSON 필드 대신 개별 필드로 저장)
-    kakao_rate = models.CharField(max_length=10, blank=True, default='', verbose_name="카카오 평점")
-    naver_rate = models.CharField(max_length=10, blank=True, default='', verbose_name="네이버 평점")
+    rate = models.FloatField(max_length=10, null=True, blank=True, default='', verbose_name="Tripsnap 평점")
     
     # 키워드 (쉼표로 구분된 문자열)
     keywords = models.TextField(blank=True, verbose_name="키워드")

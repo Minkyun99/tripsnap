@@ -318,12 +318,12 @@ const shareToPost = (results) => {
   const bakeryText = results
     .map((bakery, idx) => {
       const name = bakery.name || bakery.place_name || '이름 미상'
-      const rating = bakery.rating ? ` ⭐${bakery.rating}` : ''
+      const rate = bakery.rate ? ` ⭐${bakery.rate}` : ''
       const district = bakery.district ? `대전 ${bakery.district}` : ''
       const address = bakery.address || ''
       const location = [district, address].filter(Boolean).join(' | ')
       
-      return `${idx + 1}. ${name}${rating}\n   📍 ${location}`
+      return `${idx + 1}. ${name}${rate}\n   📍 ${location}`
     })
     .join('\n\n')
 

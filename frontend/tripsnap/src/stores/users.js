@@ -28,6 +28,10 @@ export const useUserStore = defineStore('user', {
     user: null, // { email, username, nickname, ... }
     isLoading: false,
     error: null,
+
+    // ✅ 홈에서 사용할 추천 빵집 상태
+    recommendedBakeries: [],
+    isLoadingRecommendedBakeries: false,
   }),
 
   getters: {
@@ -38,6 +42,53 @@ export const useUserStore = defineStore('user', {
   },
 
   actions: {
+    // 내부 유틸: 리스트를 셔플해서 최대 maxCount개만 반환
+    _pickRandomBakeries(list, maxCount = 5) {
+      if (!Array.isArray(list)) return []
+
+      const shuffled = [...list].sort(() => Math.random() - 0.5)
+      if (shuffled.length <= maxCount) return shuffled
+      return shuffled.slice(0, maxCount)
+    },
+
+    // ✅ 홈 화면용 추천 빵집 로드 (새로고침마다 랜덤 조합)
+    async fetchRecommendedBakeries({ maxCount = 5 } = {}) {
+      this.isLoadingRecommendedBakeries = true
+
+      try {
+        const res = await fetch(`${API_BASE}/users/api/recommended-bakeries/`, {
+          credentials: 'include',
+        })
+
+        if (res.status === 401 || res.status === 403) {
+          // 비로그인 또는 권한 없음 → 추천 목록 비움
+          this.recommendedBakeries = []
+          return []
+        }
+
+        if (!res.ok) {
+          const msg = await parseErrorMessage(res, '추천 빵집을 불러오지 못했습니다.')
+          this.error = msg
+          this.recommendedBakeries = []
+          return []
+        }
+
+        const data = await res.json()
+        const rawList = data.results || []
+
+        const picked = this._pickRandomBakeries(rawList, maxCount)
+        this.recommendedBakeries = picked
+        return picked
+      } catch (err) {
+        console.error('fetchRecommendedBakeries error:', err)
+        this.error = err?.message ?? '추천 빵집을 불러오는 중 오류가 발생했습니다.'
+        this.recommendedBakeries = []
+        return []
+      } finally {
+        this.isLoadingRecommendedBakeries = false
+      }
+    },
+
     async register({ email, password1, password2 }) {
       this.isLoading = true
       this.error = null
