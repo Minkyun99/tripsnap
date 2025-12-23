@@ -1,6 +1,6 @@
 <!-- src/views/HomeView.vue -->
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
 import { useBakeryStore } from '@/stores/bakery'
@@ -31,18 +31,16 @@ const handleKakaoLogin = () => {
 }
 
 const handleGoProfileFromModal = (nickname) => {
-  // 실제 프로필 상세 라우트 이름/파라미터에 맞게 수정
   router.push({ name: 'profile-detail', params: { nickname } })
 }
 
-// API 기본 URL
-const API_BASE = import.meta.env.VITE_API_BASE || ''
+// ✅ 추천 빵집 목록 & 로딩 상태는 Pinia(userStore)에서 가져옴
+const recommendedBakeries = computed(() => userStore.recommendedBakeries)
+const isLoadingRecommended = computed(
+  () => userStore.isLoadingRecommendedBakeries,
+)
 
-// 추천 베이커리 목록
-const recommendedBakeries = ref([])
-const isLoadingRecommended = ref(false)
-
-// 카드 클릭 → Pinia store를 통해 모달 오픈 (ID 기준, 상세 재조회)
+// 카드 클릭 → Pinia bakeryStore를 통해 모달 오픈 (ID 기준, 상세 재조회)
 const openBakeryModal = async (bakery) => {
   if (!bakery || !bakery.id) {
     console.error('추천 베이커리 ID 없음:', bakery)
@@ -50,37 +48,31 @@ const openBakeryModal = async (bakery) => {
   }
 
   try {
-    // 위도/경도 포함된 상세 정보를 가져오고, 댓글도 함께 로드
     await bakeryStore.openModalById(bakery.id, { loadComments: true })
   } catch (err) {
     console.error('추천 베이커리 모달 오픈 중 오류:', err)
   }
 }
 
-// 추천 베이커리 로드
-onMounted(async () => {
-  if (!isAuthenticated.value) return
-
-  isLoadingRecommended.value = true
-  try {
-    const res = await fetch(`${API_BASE}/users/api/recommended-bakeries/`, {
-      credentials: 'include',
-    })
-
-    if (!res.ok) {
-      console.error('추천 빵집 로드 실패:', await res.text())
+/**
+ * ✅ 인증 상태를 감시해서:
+ *  - 로그인 완료 시마다 fetchRecommendedBakeries 호출
+ *  - 이미 로그인된 상태에서 새로고침해도 즉시 한 번 호출 (immediate: true)
+ */
+watch(
+  () => isAuthenticated.value,
+  async (authed) => {
+    if (!authed) {
+      // 로그아웃 상태에서는 목록 비워두기 (선택 사항)
+      userStore.recommendedBakeries = []
       return
     }
 
-    const data = await res.json()
-    // 백엔드에서 내려주는 구조: { "results": [ ... ] }
-    recommendedBakeries.value = data.results || []
-  } catch (err) {
-    console.error('추천 빵집 로드 중 오류:', err)
-  } finally {
-    isLoadingRecommended.value = false
-  }
-})
+    // 로그인된 상태 → 추천 목록 로드 (랜덤 5개)
+    await userStore.fetchRecommendedBakeries({ maxCount: 5 })
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -158,51 +150,47 @@ onMounted(async () => {
         class="home-reco"
       >
         <h2 class="home-reco-title">이런 빵집은 어떤가요?</h2>
-
         <p class="home-reco-subtitle">
-          최근 활동과 선호도를 바탕으로 TripSnap이 골라본 빵집이에요.
+          최근 활동과 취향을 바탕으로 TripSnap이 고른 추천 빵집이에요.
         </p>
 
         <div class="home-reco-list">
-          <article
-            v-for="b in recommendedBakeries"
+          <button
+            v-for="(b, idx) in recommendedBakeries"
             :key="b.id"
-            class="home-reco-card"
+            type="button"
+            class="bakery-button"
             @click="openBakeryModal(b)"
           >
-            <!-- 상단: 빵집 이름 + 평점 배지 -->
-            <header class="home-reco-card-header">
-              <h3 class="home-reco-name">
+            <div class="bakery-number">{{ idx + 1 }}</div>
+            <div class="bakery-info">
+              <div class="bakery-name">
                 {{ b.name }}
-              </h3>
-              <div class="home-reco-rating-badge" v-if="b.rate !== null && b.rate !== undefined">
-                ⭐ {{ b.rate }}
+                <span
+                  v-if="b.rate !== null && b.rate !== undefined"
+                  class="bakery-rating"
+                >
+                  ⭐ {{
+                    typeof b.rate === 'number'
+                      ? b.rate.toFixed(1)
+                      : b.rate
+                  }}
+                </span>
               </div>
-              <div class="home-reco-rating-badge rating-empty" v-else>
-                평점 준비중
+
+              <div class="bakery-location">
+                📍
+                <span v-if="b.district">대전 {{ b.district }}</span>
+                <span v-if="b.district && b.road_address"> | </span>
+                <span
+                  v-if="b.road_address"
+                  class="bakery-address"
+                >
+                  {{ b.road_address }}
+                </span>
               </div>
-            </header>
-
-            <!-- 중단: 위치 정보 -->
-            <p class="home-reco-meta">
-              <span v-if="b.district">대전 {{ b.district }}</span>
-              <span v-if="b.district && b.road_address"> · </span>
-              <span v-if="b.road_address">{{ b.road_address }}</span>
-            </p>
-
-            <!-- 하단: 간단한 메타 정보 (카테고리, 좋아요/댓글 수) -->
-            <footer class="home-reco-footer">
-              <span v-if="b.category" class="home-reco-chip">
-                {{ b.category }}
-              </span>
-              <span class="home-reco-chip" v-if="b.like_count > 0">
-                ❤ {{ b.like_count }}
-              </span>
-              <span class="home-reco-chip" v-if="b.comment_count > 0">
-                💬 {{ b.comment_count }}
-              </span>
-            </footer>
-          </article>
+            </div>
+          </button>
         </div>
       </section>
 
@@ -401,103 +389,91 @@ $ts-text-brown: #8b4513;
 }
 
 .home-reco-subtitle {
-  margin: 0 0 1.5rem;
+  margin: 0 0 1.25rem;
   font-size: 0.9rem;
   color: #6b7280;
 }
 
+/* 추천 리스트 컨테이너: Chatbot의 빵집 리스트와 유사한 vertical 리스트 */
 .home-reco-list {
-  display: grid;
-  gap: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-.home-reco-card {
-  padding: 1rem 1.2rem;
-  border-radius: 1rem;
-  background-color: #ffffff;
-  border: 1px solid rgba(210, 105, 30, 0.35);
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    border-color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.home-reco-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
-  border-color: $ts-border-brown;
-  background-color: #fffdf8;
-}
-
-/* 카드 상단: 이름 + 평점 배지 */
-.home-reco-card-header {
+/* 🥐 ChatbotView의 bakery-button 느낌 재현 */
+.bakery-button {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.35rem;
+  gap: 0.85rem;
+  background: white;
+  border: 2px solid $ts-border-brown;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+
+  &:hover {
+    background: #fffaf0;
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  &:active {
+    transform: translateX(2px);
+  }
 }
 
-.home-reco-name {
-  margin: 0;
-  font-size: 1rem;
+.bakery-number {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  background: $ts-border-brown;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 700;
-  color: $ts-text-brown;
+  font-size: 0.9rem;
 }
 
-/* 평점 배지 */
-.home-reco-rating-badge {
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
+.bakery-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.bakery-name {
   font-weight: 600;
-  background-color: #fffbeb;
-  color: #b45309;
-  border: 1px solid rgba(245, 158, 11, 0.6);
+  font-size: 0.95rem;
+  color: $ts-text-brown;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.home-reco-rating-badge.rating-empty {
-  background-color: #f3f4f6;
-  color: #6b7280;
-  border-color: #d1d5db;
+.bakery-rating {
+  font-size: 0.85rem;
+  color: #f59e0b;
 }
 
-/* 위치 정보 */
-.home-reco-meta {
-  margin: 0.1rem 0 0.6rem;
+.bakery-location {
   font-size: 0.85rem;
   color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* 하단 메타(카테고리, 좋아요/댓글) */
-.home-reco-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.3rem;
+.bakery-address {
+  color: #9ca3af;
 }
 
-.home-reco-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  padding: 0.25rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid rgba(210, 105, 30, 0.25);
-  font-size: 0.78rem;
-  color: $ts-text-brown;
-  background-color: #fff7f0;
-}
-
-/* 추천 없음 섹션 */
 .home-reco-empty {
-  margin-top: 3rem;
-  padding: 2rem 1.5rem;
-  background-color: #fff7f0;
-  border-radius: 1.5rem;
-  border: 1px solid $ts-border-brown;
   text-align: center;
 }
 
@@ -506,12 +482,4 @@ $ts-text-brown: #8b4513;
   font-size: 0.9rem;
   color: $ts-text-brown;
 }
-
-/* 반응형: md 이상에서 3열 */
-@media (min-width: 768px) {
-  .home-reco-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 </style>
