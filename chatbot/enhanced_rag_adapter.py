@@ -339,7 +339,7 @@ class EnhancedRAGAdapter:
                         'place_name': bakery.name,
                         'district': bakery.district,
                         'address': bakery.road_address or bakery.jibun_address,
-                        'rating': bakery.naver_rate or bakery.kakao_rate,
+                        'rate': bakery.rate,
                         'phone': bakery.phone,
                         'url': bakery.url,
                     })
@@ -352,7 +352,7 @@ class EnhancedRAGAdapter:
                         'place_name': bakery_name,
                         'district': '',
                         'address': '',
-                        'rating': '',
+                        'rate': '',
                         'phone': '',
                         'url': '',
                     })
@@ -375,7 +375,7 @@ class EnhancedRAGAdapter:
                         'place_name': bakery.name,
                         'district': bakery.district,
                         'address': bakery.road_address or bakery.jibun_address,
-                        'rating': bakery.naver_rate or bakery.kakao_rate,
+                        'rate': bakery.rate,
                         'phone': bakery.phone,
                         'url': bakery.url,
                     })
@@ -386,7 +386,7 @@ class EnhancedRAGAdapter:
                         'place_name': bakery_name,
                         'district': rag_result_item.get('district', ''),
                         'address': rag_result_item.get('address', ''),
-                        'rating': rag_result_item.get('rating', ''),
+                        'rate': rag_result_item.get('rating', ''),
                         'phone': rag_result_item.get('phone', ''),
                         'url': rag_result_item.get('url', ''),
                     })

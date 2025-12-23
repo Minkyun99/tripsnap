@@ -49,14 +49,11 @@
 
             <!-- 평점 -->
             <div
-              v-if="bakery?.naver_rate || bakery?.kakao_rate"
+              v-if="bakery?.rate"
               class="bakery-rating"
             >
-              <span v-if="bakery.naver_rate" class="rating-item">
-                ⭐ 네이버 {{ bakery.naver_rate }}
-              </span>
-              <span v-if="bakery.kakao_rate" class="rating-item">
-                ⭐ 카카오 {{ bakery.kakao_rate }}
+              <span v-if="bakery.rate" class="rating-item">
+                ⭐ tripsnap 평점 {{ bakery.rate }}
               </span>
             </div>
 

@@ -938,6 +938,7 @@ def recommended_bakeries_api(request):
                 "jibun_address": b.jibun_address,
                 "url": b.url,
                 "keywords": kw_list,
+                "rate" : b.rate
             }
         )
 

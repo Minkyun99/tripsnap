@@ -53,47 +53,36 @@ def estimate_transit_time_minutes(distance_km: float, mode: TransportMode) -> fl
 
 
 
+from typing import Dict, Any
+
 def _safe_rating(bakery: Dict[str, Any]) -> float:
     """
-    dessert_en.json 의 rating 필드 변경을 반영하여 안전하게 평점을 가져온다.
+    rating 단일 필드 전용 안전 평점 변환 함수.
 
-    지원하는 구조:
-      1) 새 구조 (현재): bakery["rating"] 이 숫자(또는 숫자 문자열)
-         - 네이버 + 카카오 합산 점수 (0~10 스케일) 로 가정
-         - 내부에서는 0~5 스케일로 쓰기 위해 2로 나눠서 사용
-      2) 구 구조: bakery["rating"] 이 dict 이고
-         - rating["rating"], rating["naver_rate"], rating["kakao_rate"] 중 하나를 사용
-         - 이 값이 5를 초과하면 동일하게 2로 나눠서 0~5 스케일로 정규화
-
-    어떤 경우에도 숫자로 변환 실패 시 보수적으로 4.0을 반환.
+    - bakery["rating"] : 숫자 또는 숫자 문자열 (예: 9.42, "9.42")
+    - 0~10 스케일로 들어오는 값을 가정하고, 5 초과 시 2로 나누어 0~5 스케일로 정규화
+    - 변환 실패 또는 값 없음 시 4.0 반환
     """
     raw = bakery.get("rating")
 
-    # -----------------------------
-    # 1) dict 형태 (구조 호환)
-    # -----------------------------
-    if isinstance(raw, dict):
-        rating_info = raw
-
-        # 우선순위: rating > naver_rate > kakao_rate
-        for key in ("rating", "naver_rate", "kakao_rate"):
-            if key in rating_info and rating_info[key] not in (None, ""):
-                candidate = rating_info[key]
-                try:
-                    val = float(candidate)
-                except Exception:
-                    try:
-                        val = float(str(candidate).replace(",", ""))
-                    except Exception:
-                        continue
-
-                # 혹시 0~10 스케일로 들어온 경우를 대비해 5 초과 시 2로 나눔
-                if val > 5.0:
-                    val = val / 2.0
-                return val
-
-        # dict 인데 usable 값이 하나도 없으면 default
+    if raw in (None, ""):
         return 4.0
+
+    try:
+        val = float(raw)
+    except Exception:
+        try:
+            val = float(str(raw).replace(",", ""))
+        except Exception:
+            return 4.0
+
+    # 0~10 스케일 대비 → 5 초과면 2로 나눔
+    if val > 5.0:
+        val = val / 2.0
+
+        # 0~5 범위로 제한
+        return max(0.0, min(5.0, val))
+
 
     # -----------------------------
     # 2) 새 구조: 숫자 또는 숫자 문자열

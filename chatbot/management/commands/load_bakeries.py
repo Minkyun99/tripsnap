@@ -13,13 +13,13 @@ from chatbot.models import Bakery
 
 
 class Command(BaseCommand):
-    help = 'Load bakery data from dessert.json into database'
+    help = 'Load bakery data from dessert_en.json into database'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--file',
             type=str,
-            default='./chatbot/dessert.json',
+            default='./chatbot/dessert_en.json',
             help='Path to JSON file (default: ./chatbot/dessert_en.json)'
         )
         parser.add_argument(
@@ -39,6 +39,8 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.WARNING(f'Deleted {count} existing bakeries')
             )
+
+        
 
         # JSON 파일 로드
         try:
@@ -63,8 +65,6 @@ class Command(BaseCommand):
 
         for idx, data in enumerate(bakeries_data, 1):
             try:
-                # rating 딕셔너리에서 개별 필드로 추출
-                rating = data.get('rating', '') if isinstance(rating, dict) else ''
 
                 # keywords 리스트를 쉼표로 구분된 문자열로 변환
                 keywords_list = data.get('keywords', [])
@@ -91,7 +91,7 @@ class Command(BaseCommand):
                         'url': data.get('url', ''),
                         'latitude': data.get('latitude') or None,
                         'longitude': data.get('longitude') or None,
-                        'rate': rating,
+                        'rate': data.get('rating', ''),
                         'keywords': keywords_str,
                     }
                 )

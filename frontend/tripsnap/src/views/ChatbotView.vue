@@ -4,7 +4,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
 import { useChatStore } from '../stores/chatbot'
-import { useBakeryStore } from '@/stores/bakery'
 import { getCsrfToken } from '../utils/csrf'
 import BakeryModal from './BakeryModal.vue'
 import CreatePostModal from '../components/profile/CreatePostModal.vue'
@@ -14,7 +13,6 @@ const API_BASE = import.meta.env.VITE_API_BASE
 const router = useRouter()
 const userStore = useUserStore()
 const chatStore = useChatStore()
-const bakeryStore = useBakeryStore()
 
 const isAuthenticated = computed(() => userStore.isAuthenticated)
 const displayName = computed(() => {
@@ -30,8 +28,6 @@ const userInput = ref('')
 const isLoading = ref(false)
 const errorMessage = ref('')
 
-<<<<<<< HEAD
-=======
 // 빵집 모달 관련
 const showBakeryModal = ref(false)
 const selectedBakery = ref(null)
@@ -41,7 +37,6 @@ const bakeryComments = ref([])
 const showCreatePostModal = ref(false)
 const prefilledPostContent = ref('')
 
->>>>>>> develop
 onMounted(() => {
   // conversationId 가 없으면 키워드 선택 화면으로 되돌리기
   if (!conversationId.value) {
@@ -116,45 +111,21 @@ const sendMessage = async () => {
 
     if (data.llm_response) {
       console.log('10. LLM 응답 메시지 추가')
-<<<<<<< HEAD
-      chatStore.appendMessage('bot', data.llm_response)
-    }
-
-    if (data.results && data.results.length > 0) {
-      console.log('11. 검색 결과 있음:', data.results.length, '개')
-      const msg = {
-        id: Date.now(),
-        role: 'bot',
-        text: '__BAKERY_LIST__',
-        results: data.results,
-=======
       // results가 있으면 함께 저장
       if (data.results) {
         console.log('11. 검색 결과 있음:', data.results.length, '개')
         chatStore.appendMessage('bot', data.llm_response, data.results)
       } else {
         chatStore.appendMessage('bot', data.llm_response)
->>>>>>> develop
       }
     }
 
-<<<<<<< HEAD
-    console.log('12. chatStore.messages 상태:', chatStore.messages)
-  } catch (err) {
-    console.error('❌ sendMessage 에러:', err)
-    errorMessage.value = err.message || '메시지 전송 중 오류가 발생했습니다.'
-    chatStore.appendMessage(
-      'bot',
-      '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다.',
-    )
-=======
     console.log('12. chatStore.messages 상태:', messages.value)
 
   } catch (err) {
     console.error('❌ 에러 발생:', err)
     errorMessage.value = err.message || '오류가 발생했습니다.'
     chatStore.appendMessage('bot', '죄송합니다. 오류가 발생했습니다.')
->>>>>>> develop
   } finally {
     isLoading.value = false
   }
@@ -169,11 +140,7 @@ const handleKeydown = (e) => {
   }
 }
 
-<<<<<<< HEAD
-// 빵집 카드 클릭 → 상세 정보 조회 후 Pinia 모달 오픈
-=======
 // 빵집 버튼 클릭 처리
->>>>>>> develop
 const handleBakeryClick = async (bakery) => {
   console.log('=== 빵집 클릭 디버깅 ===')
   console.log('전체 bakery 객체:', bakery)
@@ -194,28 +161,6 @@ const handleBakeryClick = async (bakery) => {
   }
 
   try {
-<<<<<<< HEAD
-    isLoading.value = true
-    
-    console.log('API 요청 URL:', `${API_BASE}/chatbot/bakery/${bakery.id}/`)
-    
-    // 빵집 상세 정보 로드 (Django Bakery 모델 기반)
-    const detailRes = await fetch(
-      `${API_BASE}/chatbot/bakery/${bakery.id}/`,
-      {
-        credentials: 'include',
-      },
-    )
-    
-    console.log('API 응답 상태:', detailRes.status)
-    
-    if (!detailRes.ok) {
-      throw new Error('빵집 정보를 불러올 수 없습니다.')
-    }
-    
-    const detailData = await detailRes.json()
-    console.log('빵집 상세 데이터:', detailData)
-=======
     // 빵집 상세 정보 가져오기
     const res = await fetch(`${API_BASE}/chatbot/bakery/${bakery.id}/`, {
       method: 'GET',
@@ -246,24 +191,103 @@ const handleBakeryClick = async (bakery) => {
 
     // 모달 열기
     showBakeryModal.value = true
->>>>>>> develop
 
-    // Pinia 스토어 모달 오픈 + 댓글까지 함께 로드
-    bakeryStore.openModal(detailData, { loadComments: true })
   } catch (err) {
     console.error('빵집 정보 로드 에러:', err)
-<<<<<<< HEAD
-    errorMessage.value =
-      err.message || '빵집 정보를 불러오는데 실패했습니다.'
-=======
     errorMessage.value = err.message || '빵집 정보를 가져오는데 실패했습니다.'
->>>>>>> develop
   } finally {
     isLoading.value = false
   }
 }
 
-// 프로필로 이동 (모달에서 작가 닉네임 클릭 시)
+// 빵집 모달 닫기
+const closeBakeryModal = () => {
+  showBakeryModal.value = false
+  selectedBakery.value = null
+  bakeryComments.value = []
+}
+
+// 빵집 좋아요 토글
+const toggleBakeryLike = async () => {
+  if (!selectedBakery.value) return
+
+  const csrftoken = getCsrfToken()
+  if (!csrftoken) {
+    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다.'
+    return
+  }
+
+  try {
+    const res = await fetch(
+      `${API_BASE}/chatbot/bakery/${selectedBakery.value.id}/like/`,
+      {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrftoken,
+        },
+        credentials: 'include',
+      }
+    )
+
+    if (!res.ok) {
+      throw new Error('좋아요 처리에 실패했습니다.')
+    }
+
+    const data = await res.json()
+    
+    // 상태 업데이트
+    selectedBakery.value.is_liked = data.is_liked
+    selectedBakery.value.like_count = data.like_count
+
+  } catch (err) {
+    console.error('좋아요 토글 에러:', err)
+    errorMessage.value = err.message || '좋아요 처리에 실패했습니다.'
+  }
+}
+
+// 빵집 댓글 작성
+const submitBakeryComment = async (content) => {
+  if (!selectedBakery.value || !content.trim()) return
+
+  const csrftoken = getCsrfToken()
+  if (!csrftoken) {
+    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다.'
+    return
+  }
+
+  try {
+    const res = await fetch(
+      `${API_BASE}/chatbot/bakery/${selectedBakery.value.id}/comments/create/`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ content }),
+      }
+    )
+
+    if (!res.ok) {
+      throw new Error('댓글 작성에 실패했습니다.')
+    }
+
+    const data = await res.json()
+    
+    // 댓글 목록 맨 위에 추가 (최신순)
+    bakeryComments.value.unshift(data)
+    
+    // 댓글 수 증가
+    selectedBakery.value.comment_count += 1
+
+  } catch (err) {
+    console.error('댓글 작성 에러:', err)
+    errorMessage.value = err.message || '댓글 작성에 실패했습니다.'
+  }
+}
+
+// 프로필로 이동
 const goToBakeryProfile = (nickname) => {
   console.log('프로필로 이동:', nickname)
   
@@ -271,12 +295,6 @@ const goToBakeryProfile = (nickname) => {
     console.warn('닉네임이 없습니다.')
     return
   }
-<<<<<<< HEAD
-
-  // 모달 닫기는 BakeryModal 내부에서 store.closeModal() 호출 or
-  // 외부에서 호출해도 무방 (여기서는 라우팅만 수행)
-  router.push({ name: 'profile-detail', params: { nickname } })
-=======
   
   closeBakeryModal()
   router.push({ name: 'profile-detail', params: { nickname } })
@@ -296,12 +314,12 @@ const shareToPost = (results) => {
   const bakeryText = results
     .map((bakery, idx) => {
       const name = bakery.name || bakery.place_name || '이름 미상'
-      const rating = bakery.rating ? ` ⭐${bakery.rating}` : ''
+      const rate = bakery.rate ? ` ⭐${bakery.rate}` : ''
       const district = bakery.district ? `대전 ${bakery.district}` : ''
       const address = bakery.address || ''
       const location = [district, address].filter(Boolean).join(' | ')
       
-      return `${idx + 1}. ${name}${rating}\n   📍 ${location}`
+      return `${idx + 1}. ${name}${rate}\n   📍 ${location}`
     })
     .join('\n\n')
 
@@ -318,7 +336,6 @@ const shareToPost = (results) => {
 const closeCreatePostModal = () => {
   showCreatePostModal.value = false
   prefilledPostContent.value = ''
->>>>>>> develop
 }
 </script>
 
@@ -327,9 +344,7 @@ const closeCreatePostModal = () => {
     <div class="ts-chat-wrapper">
       <div class="ts-chat-header">
         <h2>TripSnap 챗봇</h2>
-        <p v-if="displayName">
-          {{ displayName }} 님을 위한 빵집 여행 도우미
-        </p>
+        <p v-if="displayName">{{ displayName }} 님을 위한 빵집 여행 도우미</p>
       </div>
 
       <div class="ts-chat-body">
@@ -341,13 +356,7 @@ const closeCreatePostModal = () => {
         >
           <div class="bubble">
             <span v-if="m.role === 'user'">👤 {{ m.text }}</span>
-            <span
-              v-else-if="
-                m.text !== '__BAKERY_LIST__' && !m.results
-              "
-            >
-              🤖 {{ m.text }}
-            </span>
+            <span v-else-if="m.text !== '__BAKERY_LIST__' && !m.results">🤖 {{ m.text }}</span>
             
             <!-- 빵집 목록이 있는 경우 버튼으로 표시 -->
             <div v-else-if="m.results" class="bakery-list">
@@ -371,47 +380,24 @@ const closeCreatePostModal = () => {
                 <div class="bakery-info">
                   <div class="bakery-name">
                     {{ bakery.place_name || '이름 미상' }}
-                    <span
-                      v-if="bakery.rating"
-                      class="bakery-rating"
-                    >
-                      ⭐ {{ bakery.rating }}
-                    </span>
+                    <span v-if="bakery.rate" class="bakery-rating">⭐ {{ bakery.rate }}</span>
                   </div>
-                  <div
-                    v-if="bakery.district || bakery.address"
-                    class="bakery-location"
-                  >
-                    📍
-                    <span v-if="bakery.district">
-                      대전 {{ bakery.district }}
-                    </span>
-                    <span
-                      v-if="bakery.district && bakery.address"
-                    >
-                      |
-                    </span>
-                    <span
-                      v-if="bakery.address"
-                      class="bakery-address"
-                    >
-                      {{ bakery.address }}
-                    </span>
+                  <div v-if="bakery.district || bakery.address" class="bakery-location">
+                    📍 
+                    <span v-if="bakery.district">대전 {{ bakery.district }}</span>
+                    <span v-if="bakery.district && bakery.address"> | </span>
+                    <span v-if="bakery.address" class="bakery-address">{{ bakery.address }}</span>
                   </div>
                 </div>
               </button>
             </div>
           </div>
         </div>
-        <div v-if="isLoading" class="ts-chat-loading">
-          🤖 생각 중...
-        </div>
+        <div v-if="isLoading" class="ts-chat-loading">🤖 생각 중...</div>
       </div>
 
       <div class="ts-chat-footer">
-        <p v-if="errorMessage" class="ts-error">
-          {{ errorMessage }}
-        </p>
+        <p v-if="errorMessage" class="ts-error">{{ errorMessage }}</p>
         <textarea
           v-model="userInput"
           class="ts-input"
@@ -428,10 +414,6 @@ const closeCreatePostModal = () => {
       </div>
     </div>
 
-<<<<<<< HEAD
-    <!-- 공용 베이커리 모달 (Pinia 기반) -->
-    <BakeryModal @go-profile="goToBakeryProfile" />
-=======
     <!-- 빵집 모달 -->
     <BakeryModal
       v-if="showBakeryModal"
@@ -450,7 +432,6 @@ const closeCreatePostModal = () => {
       :prefilled-content="prefilledPostContent"
       @close="closeCreatePostModal"
     />
->>>>>>> develop
   </div>
 </template>
 
@@ -525,21 +506,7 @@ $ts-bg-cream: #fffaf0;
   border: 2px solid $ts-border-brown;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
   font-size: 0.95rem;
-<<<<<<< HEAD
-}
-
-.ts-chat-message.from-user .bubble {
-  background: color.adjust(#ff69b4, $lightness: 27%);
-  color: #2d2d2d; /* 어두운 회색으로 변경 */
-  border-bottom-right-radius: 0.28rem;
-  box-shadow: 0 3px 0 color.adjust(#ff69b4, $lightness: -15%);
-}
-
-.ts-chat-message.from-bot .bubble {
-  background: #fff;
-=======
   line-height: 1.5;
->>>>>>> develop
   color: #333;
   word-wrap: break-word;
   white-space: pre-wrap;
