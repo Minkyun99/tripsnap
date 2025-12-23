@@ -36,6 +36,7 @@ const bakeryComments = ref([])
 // ✨ 게시글 공유 모달 관련
 const showCreatePostModal = ref(false)
 const prefilledPostContent = ref('')
+const sharedBakeryData = ref([])  // ✨ 빵집 데이터 저장
 
 onMounted(() => {
   // conversationId 가 없으면 키워드 선택 화면으로 되돌리기
@@ -310,6 +311,9 @@ const shareToPost = (results) => {
     return
   }
 
+  // ✨ 빵집 데이터 저장 (지도 표시용)
+  sharedBakeryData.value = results
+
   // 빵집 목록을 텍스트로 변환
   const bakeryText = results
     .map((bakery, idx) => {
@@ -336,6 +340,7 @@ const shareToPost = (results) => {
 const closeCreatePostModal = () => {
   showCreatePostModal.value = false
   prefilledPostContent.value = ''
+  sharedBakeryData.value = []  // ✨ 빵집 데이터 초기화
 }
 </script>
 
@@ -356,40 +361,47 @@ const closeCreatePostModal = () => {
         >
           <div class="bubble">
             <span v-if="m.role === 'user'">👤 {{ m.text }}</span>
-            <span v-else-if="m.text !== '__BAKERY_LIST__' && !m.results">🤖 {{ m.text }}</span>
             
-            <!-- 빵집 목록이 있는 경우 버튼으로 표시 -->
-            <div v-else-if="m.results" class="bakery-list">
-              <div class="bakery-list-header">📍 추천 빵집 목록</div>
+            <!-- ✨ 봇 응답: LLM 텍스트와 빵집 목록 둘 다 표시 -->
+            <div v-else-if="m.role === 'bot'">
+              <!-- LLM 텍스트 응답 -->
+              <div v-if="m.text && m.text !== '__BAKERY_LIST__'" class="bot-text">
+                🤖 {{ m.text }}
+              </div>
               
-              <!-- ✨ 공유하기 버튼 ✨ -->
-              <button 
-                class="share-to-post-button"
-                @click="shareToPost(m.results)"
-              >
-                📝 내 게시글에 공유하기
-              </button>
-              
-              <button
-                v-for="(bakery, idx) in m.results"
-                :key="idx"
-                class="bakery-button"
-                @click="handleBakeryClick(bakery)"
-              >
-                <div class="bakery-number">{{ idx + 1 }}</div>
-                <div class="bakery-info">
-                  <div class="bakery-name">
-                    {{ bakery.place_name || '이름 미상' }}
-                    <span v-if="bakery.rating" class="bakery-rating">⭐ {{ bakery.rating }}</span>
+              <!-- 빵집 목록이 있는 경우 버튼으로 표시 -->
+              <div v-if="m.results" class="bakery-list">
+                <div class="bakery-list-header">📍 추천 빵집 목록</div>
+                
+                <!-- ✨ 공유하기 버튼 ✨ -->
+                <button 
+                  class="share-to-post-button"
+                  @click="shareToPost(m.results)"
+                >
+                  📝 내 게시글에 공유하기
+                </button>
+                
+                <button
+                  v-for="(bakery, idx) in m.results"
+                  :key="idx"
+                  class="bakery-button"
+                  @click="handleBakeryClick(bakery)"
+                >
+                  <div class="bakery-number">{{ idx + 1 }}</div>
+                  <div class="bakery-info">
+                    <div class="bakery-name">
+                      {{ bakery.place_name || '이름 미상' }}
+                      <span v-if="bakery.rating" class="bakery-rating">⭐ {{ bakery.rating }}</span>
+                    </div>
+                    <div v-if="bakery.district || bakery.address" class="bakery-location">
+                      📍 
+                      <span v-if="bakery.district">대전 {{ bakery.district }}</span>
+                      <span v-if="bakery.district && bakery.address"> | </span>
+                      <span v-if="bakery.address" class="bakery-address">{{ bakery.address }}</span>
+                    </div>
                   </div>
-                  <div v-if="bakery.district || bakery.address" class="bakery-location">
-                    📍 
-                    <span v-if="bakery.district">대전 {{ bakery.district }}</span>
-                    <span v-if="bakery.district && bakery.address"> | </span>
-                    <span v-if="bakery.address" class="bakery-address">{{ bakery.address }}</span>
-                  </div>
-                </div>
-              </button>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -430,6 +442,7 @@ const closeCreatePostModal = () => {
       v-if="showCreatePostModal"
       :prefilled-title="'🍞 챗봇 추천 빵집 여행'"
       :prefilled-content="prefilledPostContent"
+      :bakery-locations="sharedBakeryData"
       @close="closeCreatePostModal"
     />
   </div>
@@ -523,6 +536,13 @@ $ts-bg-cream: #fffaf0;
   gap: 0.75rem;
   width: 100%;
   max-width: none;
+}
+
+/* ✨ 봇 텍스트와 빵집 목록 간격 */
+.bot-text {
+  margin-bottom: 1rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .bakery-list-header {
