@@ -1,7 +1,7 @@
 """
 Enhanced RAG Adapter
 
-RAG 시스템의 응답을 Django 모델과 연결하고,
+RAG 시스템의 응답을 Django 모델과 연결하고, 
 LLM 응답을 파싱하여 실제 DB 데이터로 enrichment하는 어댑터.
 
 책임:
@@ -47,9 +47,6 @@ class EnhancedRAGAdapter:
         추천 응답이 아닌 경우:
         - "찾지 못했다", "없습니다" 등 실패 메시지
         - "종류", "차이", "역사", "만드는 법" 등 지식 설명
-
-        Args:
-            llm_response: LLM의 응답 텍스트
 
         Returns:
             bool: 빵집 추천 응답이면 True, 아니면 False
@@ -115,10 +112,8 @@ class EnhancedRAGAdapter:
             1 for kw in recommendation_keywords if kw in llm_response
         )
 
-        # 4) 리스트 형식 여부
-        has_numbered_list = bool(
-            re.search(r"[1-9]\.|①|②|③|④|⑤", llm_response)
-        )
+        # 4) 번호 리스트 여부
+        has_numbered_list = bool(re.search(r"[1-9]\.|①|②|③|④|⑤", llm_response))
 
         # 5) 최종 판별
         if recommendation_count >= 2:
@@ -128,9 +123,7 @@ class EnhancedRAGAdapter:
             return True
 
         if has_numbered_list and recommendation_count >= 1:
-            logger.info(
-                "✅ [IS_RECOMMENDATION] 번호 리스트 + 추천 키워드 감지"
-            )
+            logger.info("✅ [IS_RECOMMENDATION] 번호 리스트 + 추천 키워드 감지")
             return True
 
         logger.info(
@@ -140,7 +133,7 @@ class EnhancedRAGAdapter:
         return False
 
     # ==========================================
-    # 2. LLM 응답 파싱 (빵집 이름 추출)
+    # 2. LLM 응답 파싱 (빵집 이름)
     # ==========================================
 
     def extract_bakery_names_from_llm_response(self, llm_text: str) -> List[str]:
@@ -151,9 +144,6 @@ class EnhancedRAGAdapter:
         - "🥖 추천 1: 더 베이커"
         - "🥖 추천 2: 폴레폴레 유성본점"
         - "1. 몽심 대흥점 (소금빵)"
-
-        Args:
-            llm_text: LLM 응답 텍스트
 
         Returns:
             List[str]: 파싱된 빵집 이름 리스트
@@ -174,23 +164,16 @@ class EnhancedRAGAdapter:
             if not name:
                 return ""
 
-            # 앞뒤 공백 제거
             name = name.strip()
-
             # 구분선(=== 등) 제거
             name = re.split(r"[=]{2,}", name)[0].strip()
-
             # 연속 공백 정리
             name = re.sub(r"\s+", " ", name)
 
-            # 너무 짧거나 긴 이름 필터
             if len(name) < 2 or len(name) > 50:
                 return ""
-
-            # 숫자만인 경우 제외
             if name.isdigit():
                 return ""
-
             return name
 
         bakery_names: List[str] = []
@@ -201,7 +184,6 @@ class EnhancedRAGAdapter:
             if n:
                 bakery_names.append(n)
 
-        # 패턴 1에서 충분히 찾았으면 그대로 사용
         if len(bakery_names) >= 3:
             logger.info(
                 f"🔍 [PARSE] LLM 응답에서 {len(bakery_names)}개 빵집 이름 파싱 (패턴1)"
@@ -236,16 +218,10 @@ class EnhancedRAGAdapter:
         if not name:
             return ""
 
-        # 괄호 제거
         name = re.sub(r"\([^)]*\)", "", name)
         name = re.sub(r"\[[^\]]*\]", "", name)
-
-        # 공백 제거
         name = name.replace(" ", "")
-
-        # 한글/영문/숫자만 남기기
         name = re.sub(r"[^가-힣a-zA-Z0-9]", "", name)
-
         return name.strip()
 
     def find_bakery_fuzzy(self, bakery_name: str) -> Optional[Any]:
@@ -256,9 +232,6 @@ class EnhancedRAGAdapter:
         1. 정확한 이름으로 검색
         2. 정규화된 이름 비교
         3. 부분 매칭 (icontains)
-
-        Args:
-            bakery_name: 찾을 빵집 이름
 
         Returns:
             Bakery 인스턴스 또는 None
@@ -294,7 +267,33 @@ class EnhancedRAGAdapter:
         return None
 
     # ==========================================
-    # 4. 메인 enrichment 메서드
+    # 4. 사용자용 간단 안내 메시지 생성
+    # ==========================================
+
+    def build_user_friendly_message(
+        self,
+        is_recommendation: bool,
+        enriched_results: Optional[List[Dict[str, Any]]],
+    ) -> str:
+        """
+        프론트에서 그대로 보여줄 수 있는 짧은 안내 문구를 생성합니다.
+        LLM 원문 전체 대신, 한 줄 요약 / 코스 안내용으로 사용할 수 있습니다.
+        """
+        if not is_recommendation:
+            return "빵집 추천이 아닌 일반 안내 답변입니다."
+
+        count = len(enriched_results or [])
+        if count == 0:
+            return "조건에 맞는 빵집을 찾지 못했어요. 조건을 조금 넓혀 다시 물어봐 주세요."
+
+        if count == 1:
+            return "아래 빵집 1곳을 추천드렸어요. 이동 시간과 방문 계획을 함께 확인해 보세요."
+        if count <= 3:
+            return f"총 {count}곳의 빵집을 추천드렸어요. 각 카드에서 평점과 동선을 한눈에 확인하실 수 있습니다."
+        return f"총 {count}곳의 빵집으로 빵지순례 코스를 구성했어요. 아래 카드에서 이동 시간과 방문 계획을 확인해 보세요."
+
+    # ==========================================
+    # 5. 메인 enrichment 메서드
     # ==========================================
 
     def answer_query_with_enrichment(
@@ -305,26 +304,15 @@ class EnhancedRAGAdapter:
         """
         RAG 시스템을 호출하고 응답을 DB 데이터로 enrichment합니다.
 
-        처리 순서:
-        1. RAG 시스템 호출 (벡터 검색 + LLM)
-        2. LLM 응답이 추천인지 판별
-        3. 추천이면 빵집 이름 파싱
-        4. DB에서 빵집 찾기 (퍼지 매칭)
-        5. DB 정보로 enrichment
-
-        Args:
-            query: 사용자 질의
-            use_llm: LLM 사용 여부
-
         Returns:
             {
                 'llm_response': str,
                 'is_recommendation': bool,
-                'results': List[Dict] | None  # 추천이 아닐 땐 None
+                'results': List[Dict] | None,
+                'user_friendly_message': str
             }
         """
-        # 순환 참조 방지를 위해 지연 import
-        from .rag_wrapper import RAGWrapper
+        from .rag_wrapper import RAGWrapper  # 지연 import
 
         # 1) RAG 호출
         rag_result = RAGWrapper.chat(message=query, use_llm=use_llm)
@@ -340,6 +328,7 @@ class EnhancedRAGAdapter:
                 "llm_response": llm_response,
                 "is_recommendation": False,
                 "results": None,
+                "user_friendly_message": "빵집 추천이 아닌 일반 안내 답변입니다.",
             }
 
         logger.info("✅ [IS_RECOMMENDATION] results 처리 시작")
@@ -366,9 +355,7 @@ class EnhancedRAGAdapter:
                             "name": bakery.name,
                             "place_name": bakery.name,
                             "district": getattr(bakery, "district", ""),
-                            "address": getattr(
-                                bakery, "road_address", ""
-                            )
+                            "address": getattr(bakery, "road_address", "")
                             or getattr(bakery, "jibun_address", ""),
                             "rate": getattr(bakery, "rate", ""),
                             "phone": getattr(bakery, "phone", ""),
@@ -411,9 +398,7 @@ class EnhancedRAGAdapter:
                             "name": bakery.name,
                             "place_name": bakery.name,
                             "district": getattr(bakery, "district", ""),
-                            "address": getattr(
-                                bakery, "road_address", ""
-                            )
+                            "address": getattr(bakery, "road_address", "")
                             or getattr(bakery, "jibun_address", ""),
                             "rate": getattr(bakery, "rate", ""),
                             "phone": getattr(bakery, "phone", ""),
@@ -434,12 +419,16 @@ class EnhancedRAGAdapter:
                         }
                     )
 
-        logger.info(
-            f"📊 [ENRICHMENT] 최종 결과: {len(enriched_results)}개 빵집"
+        logger.info(f"📊 [ENRICHMENT] 최종 결과: {len(enriched_results)}개 빵집")
+
+        user_friendly_message = self.build_user_friendly_message(
+            is_recommendation=is_recommendation,
+            enriched_results=enriched_results,
         )
 
         return {
             "llm_response": llm_response,
             "is_recommendation": True,
             "results": enriched_results if enriched_results else None,
+            "user_friendly_message": user_friendly_message,
         }

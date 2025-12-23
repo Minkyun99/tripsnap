@@ -20,8 +20,11 @@ async function initCsrf() {
   }
 }
 
+import '@/assets/globals.scss'
+
 async function bootstrap() {
   await initCsrf()
+
 
   const app = createApp(App)
 

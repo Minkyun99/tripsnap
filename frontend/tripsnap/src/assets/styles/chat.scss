@@ -1,0 +1,260 @@
+/* /src/assets/styles/chat.scss */
+@use './variables' as *;
+
+/* 전체 채팅 래퍼 */
+.ts-chat-wrapper {
+  max-width: 52rem;
+  width: 100%;
+  margin: 2.5rem auto;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: $radius-lg;
+  border: 4px solid $color-chat-border;
+  box-shadow: $shadow-strong;
+  padding: 1.75rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  font-family: $font-main;
+}
+
+/* 헤더 영역 */
+.ts-chat-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+
+  h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: $color-chat-border;
+    margin: 0;
+  }
+
+  p {
+    font-size: 0.95rem;
+    color: #6b7280;
+    margin: 0;
+  }
+}
+
+/* 메시지 영역 */
+.ts-chat-body {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 1.25rem;
+  padding: 0.25rem;
+  max-height: 28rem;
+}
+
+.ts-chat-message {
+  display: flex;
+  margin-bottom: 1rem;
+
+  &.from-user {
+    justify-content: flex-end;
+  }
+
+  &.from-bot {
+    justify-content: flex-start;
+  }
+}
+
+.bubble {
+  background: #ffffff;
+  padding: 0.85rem 1.1rem;
+  border-radius: 1.2rem;
+  max-width: 75%;
+  border: 2px solid $color-chat-border;
+  box-shadow: $shadow-soft;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #333;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.from-user .bubble {
+  background: darken($color-chat-bg, 3%);
+}
+
+/* 봇 텍스트 + 요약/자세히 보기 구조를 만들 때 사용할 클래스 */
+.bot-text {
+  margin-bottom: 1rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* 빵집 목록 스타일 */
+.bakery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: none;
+}
+
+.bakery-list-header {
+  font-weight: 700;
+  font-size: 1rem;
+  color: $color-chat-border;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid $color-chat-border;
+}
+
+/* 공유하기 버튼 */
+.share-to-post-button {
+  background: linear-gradient(135deg, $color-accent-pink 0%, $color-accent-orange 100%);
+  color: white;
+  border: none;
+  border-radius: $radius-md;
+  padding: 0.85rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(255, 107, 157, 0.3);
+  margin-bottom: 0.5rem;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(255, 107, 157, 0.4);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+.bakery-button {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: white;
+  border: 2px solid $color-chat-border;
+  border-radius: $radius-md;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+
+  &:hover {
+    background: $color-chat-bg;
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  &:active {
+    transform: translateX(2px);
+  }
+}
+
+.bakery-number {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  background: $color-chat-border;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.bakery-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.bakery-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: $color-chat-text;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bakery-rating {
+  font-size: 0.85rem;
+  color: #f59e0b;
+}
+
+.bakery-location {
+  font-size: 0.85rem;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bakery-address {
+  color: #9ca3af;
+}
+
+/* 로딩 텍스트 */
+.ts-chat-loading {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #9ca3af;
+  padding: 0.5rem;
+}
+
+/* 입력 영역 */
+.ts-chat-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ts-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.ts-input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 2px solid $color-chat-border;
+  border-radius: $radius-md;
+  font-size: 0.95rem;
+  resize: vertical;
+  min-height: 3.5rem;
+  font-family: inherit;
+
+  &:focus {
+    outline: none;
+    border-color: darken($color-chat-border, 10%);
+    box-shadow: 0 0 0 3px rgba($color-chat-border, 0.1);
+  }
+}
+
+.ts-send-button {
+  align-self: flex-end;
+  background: $color-chat-border;
+  color: white;
+  border: none;
+  padding: 0.75rem 2rem;
+  border-radius: $radius-md;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: darken($color-chat-border, 8%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba($color-chat-border, 0.3);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
