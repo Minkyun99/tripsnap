@@ -7,6 +7,7 @@ import { useChatStore } from '../stores/chatbot'
 import { useBakeryStore } from '@/stores/bakery'
 import { getCsrfToken } from '../utils/csrf'
 import BakeryModal from './BakeryModal.vue'
+import CreatePostModal from '../components/profile/CreatePostModal.vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE
 
@@ -29,6 +30,18 @@ const userInput = ref('')
 const isLoading = ref(false)
 const errorMessage = ref('')
 
+<<<<<<< HEAD
+=======
+// 빵집 모달 관련
+const showBakeryModal = ref(false)
+const selectedBakery = ref(null)
+const bakeryComments = ref([])
+
+// ✨ 게시글 공유 모달 관련
+const showCreatePostModal = ref(false)
+const prefilledPostContent = ref('')
+
+>>>>>>> develop
 onMounted(() => {
   // conversationId 가 없으면 키워드 선택 화면으로 되돌리기
   if (!conversationId.value) {
@@ -95,7 +108,7 @@ const sendMessage = async () => {
     console.log('8. API 응답 상태:', res.status, res.statusText)
 
     if (!res.ok) {
-      throw new Error(`서버 응답 에러: ${res.status}`)
+      throw new Error('서버 응답 오류')
     }
 
     const data = await res.json()
@@ -103,6 +116,7 @@ const sendMessage = async () => {
 
     if (data.llm_response) {
       console.log('10. LLM 응답 메시지 추가')
+<<<<<<< HEAD
       chatStore.appendMessage('bot', data.llm_response)
     }
 
@@ -113,10 +127,18 @@ const sendMessage = async () => {
         role: 'bot',
         text: '__BAKERY_LIST__',
         results: data.results,
+=======
+      // results가 있으면 함께 저장
+      if (data.results) {
+        console.log('11. 검색 결과 있음:', data.results.length, '개')
+        chatStore.appendMessage('bot', data.llm_response, data.results)
+      } else {
+        chatStore.appendMessage('bot', data.llm_response)
+>>>>>>> develop
       }
-      chatStore.messages.push(msg)
     }
 
+<<<<<<< HEAD
     console.log('12. chatStore.messages 상태:', chatStore.messages)
   } catch (err) {
     console.error('❌ sendMessage 에러:', err)
@@ -125,22 +147,33 @@ const sendMessage = async () => {
       'bot',
       '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다.',
     )
+=======
+    console.log('12. chatStore.messages 상태:', messages.value)
+
+  } catch (err) {
+    console.error('❌ 에러 발생:', err)
+    errorMessage.value = err.message || '오류가 발생했습니다.'
+    chatStore.appendMessage('bot', '죄송합니다. 오류가 발생했습니다.')
+>>>>>>> develop
   } finally {
     isLoading.value = false
-    console.log('=== sendMessage 종료 ===')
   }
+
+  console.log('=== sendMessage 종료 ===')
 }
 
 const handleKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    if (!isLoading.value) {
-      sendMessage()
-    }
+    sendMessage()
   }
 }
 
+<<<<<<< HEAD
 // 빵집 카드 클릭 → 상세 정보 조회 후 Pinia 모달 오픈
+=======
+// 빵집 버튼 클릭 처리
+>>>>>>> develop
 const handleBakeryClick = async (bakery) => {
   console.log('=== 빵집 클릭 디버깅 ===')
   console.log('전체 bakery 객체:', bakery)
@@ -149,17 +182,19 @@ const handleBakeryClick = async (bakery) => {
   console.log('bakery.place_name:', bakery.place_name)
   
   if (!bakery.id) {
-    errorMessage.value = '빵집 ID가 없습니다. RAG 결과를 확인하세요.'
-    console.error('❌ bakery.id가 없음!')
+    console.log('❌ bakery.id가 없음!')
+    alert('빵집 ID가 없습니다. RAG 결과를 확인하세요.')
     return
   }
-  
-  if (!isAuthenticated.value) {
-    errorMessage.value = '빵집 정보를 보려면 로그인이 필요합니다.'
+
+  const csrftoken = getCsrfToken()
+  if (!csrftoken) {
+    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다.'
     return
   }
 
   try {
+<<<<<<< HEAD
     isLoading.value = true
     
     console.log('API 요청 URL:', `${API_BASE}/chatbot/bakery/${bakery.id}/`)
@@ -180,13 +215,49 @@ const handleBakeryClick = async (bakery) => {
     
     const detailData = await detailRes.json()
     console.log('빵집 상세 데이터:', detailData)
+=======
+    // 빵집 상세 정보 가져오기
+    const res = await fetch(`${API_BASE}/chatbot/bakery/${bakery.id}/`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+
+    if (!res.ok) {
+      throw new Error('빵집 정보를 가져오는데 실패했습니다.')
+    }
+
+    const detailData = await res.json()
+    selectedBakery.value = detailData
+
+    // 댓글 가져오기
+    const commentsRes = await fetch(
+      `${API_BASE}/chatbot/bakery/${bakery.id}/comments/`,
+      {
+        method: 'GET',
+        credentials: 'include',
+      }
+    )
+
+    if (commentsRes.ok) {
+      bakeryComments.value = await commentsRes.json()
+    } else {
+      bakeryComments.value = []
+    }
+
+    // 모달 열기
+    showBakeryModal.value = true
+>>>>>>> develop
 
     // Pinia 스토어 모달 오픈 + 댓글까지 함께 로드
     bakeryStore.openModal(detailData, { loadComments: true })
   } catch (err) {
     console.error('빵집 정보 로드 에러:', err)
+<<<<<<< HEAD
     errorMessage.value =
       err.message || '빵집 정보를 불러오는데 실패했습니다.'
+=======
+    errorMessage.value = err.message || '빵집 정보를 가져오는데 실패했습니다.'
+>>>>>>> develop
   } finally {
     isLoading.value = false
   }
@@ -200,10 +271,54 @@ const goToBakeryProfile = (nickname) => {
     console.warn('닉네임이 없습니다.')
     return
   }
+<<<<<<< HEAD
 
   // 모달 닫기는 BakeryModal 내부에서 store.closeModal() 호출 or
   // 외부에서 호출해도 무방 (여기서는 라우팅만 수행)
   router.push({ name: 'profile-detail', params: { nickname } })
+=======
+  
+  closeBakeryModal()
+  router.push({ name: 'profile-detail', params: { nickname } })
+}
+
+// ✨✨ 게시글 공유 기능 ✨✨
+const shareToPost = (results) => {
+  console.log('=== 게시글 공유 시작 ===')
+  console.log('추천 빵집:', results)
+  
+  if (!results || results.length === 0) {
+    alert('공유할 빵집이 없습니다.')
+    return
+  }
+
+  // 빵집 목록을 텍스트로 변환
+  const bakeryText = results
+    .map((bakery, idx) => {
+      const name = bakery.name || bakery.place_name || '이름 미상'
+      const rating = bakery.rating ? ` ⭐${bakery.rating}` : ''
+      const district = bakery.district ? `대전 ${bakery.district}` : ''
+      const address = bakery.address || ''
+      const location = [district, address].filter(Boolean).join(' | ')
+      
+      return `${idx + 1}. ${name}${rating}\n   📍 ${location}`
+    })
+    .join('\n\n')
+
+  // 미리 채워진 내용 설정
+  prefilledPostContent.value = `🍞 TripSnap 챗봇 추천 빵집\n\n${bakeryText}\n\n✨ AI가 추천해준 대전의 맛있는 빵집들이에요!`
+  
+  // 모달 열기
+  showCreatePostModal.value = true
+  
+  console.log('게시글 작성 모달 열림')
+}
+
+// 게시글 모달 닫기
+const closeCreatePostModal = () => {
+  showCreatePostModal.value = false
+  prefilledPostContent.value = ''
+>>>>>>> develop
 }
 </script>
 
@@ -237,6 +352,15 @@ const goToBakeryProfile = (nickname) => {
             <!-- 빵집 목록이 있는 경우 버튼으로 표시 -->
             <div v-else-if="m.results" class="bakery-list">
               <div class="bakery-list-header">📍 추천 빵집 목록</div>
+              
+              <!-- ✨ 공유하기 버튼 ✨ -->
+              <button 
+                class="share-to-post-button"
+                @click="shareToPost(m.results)"
+              >
+                📝 내 게시글에 공유하기
+              </button>
+              
               <button
                 v-for="(bakery, idx) in m.results"
                 :key="idx"
@@ -304,8 +428,29 @@ const goToBakeryProfile = (nickname) => {
       </div>
     </div>
 
+<<<<<<< HEAD
     <!-- 공용 베이커리 모달 (Pinia 기반) -->
     <BakeryModal @go-profile="goToBakeryProfile" />
+=======
+    <!-- 빵집 모달 -->
+    <BakeryModal
+      v-if="showBakeryModal"
+      :bakery="selectedBakery"
+      :comments="bakeryComments"
+      @close="closeBakeryModal"
+      @toggle-like="toggleBakeryLike"
+      @submit-comment="submitBakeryComment"
+      @go-profile="goToBakeryProfile"
+    />
+
+    <!-- ✨ 게시글 작성 모달 ✨ -->
+    <CreatePostModal
+      v-if="showCreatePostModal"
+      :prefilled-title="'🍞 챗봇 추천 빵집 여행'"
+      :prefilled-content="prefilledPostContent"
+      @close="closeCreatePostModal"
+    />
+>>>>>>> develop
   </div>
 </template>
 
@@ -346,26 +491,22 @@ $ts-bg-cream: #fffaf0;
 
 .ts-chat-header p {
   font-size: 0.95rem;
-  color: $ts-text-brown;
+  color: #6b7280;
   margin: 0;
 }
 
 /* 메시지 영역 */
 .ts-chat-body {
   flex: 1;
-  min-height: 260px;
-  max-height: 480px;
   overflow-y: auto;
-  padding: 1rem 0.4rem;
-  border-radius: 0.9rem;
-  background: $ts-bg-cream;
-  border: 1px solid rgba(210, 105, 30, 0.25);
+  margin-bottom: 1.25rem;
+  padding: 0.25rem;
+  max-height: 28rem;
 }
 
-/* 한 줄 메시지 */
 .ts-chat-message {
   display: flex;
-  margin-bottom: 0.85rem;
+  margin-bottom: 1rem;
 }
 
 .ts-chat-message.from-user {
@@ -377,12 +518,14 @@ $ts-bg-cream: #fffaf0;
 }
 
 .bubble {
-  max-width: 74%;
-  padding: 0.75rem 1rem;
-  border-radius: 1rem;
-  word-break: break-word;
-  line-height: 1.45;
+  background: white;
+  padding: 0.85rem 1.1rem;
+  border-radius: 1.2rem;
+  max-width: 75%;
+  border: 2px solid $ts-border-brown;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
   font-size: 0.95rem;
+<<<<<<< HEAD
 }
 
 .ts-chat-message.from-user .bubble {
@@ -394,10 +537,16 @@ $ts-bg-cream: #fffaf0;
 
 .ts-chat-message.from-bot .bubble {
   background: #fff;
+=======
+  line-height: 1.5;
+>>>>>>> develop
   color: #333;
-  border: 3px solid $ts-border-brown;
-  border-bottom-left-radius: 0.28rem;
-  box-shadow: 0 4px 0 color.adjust($ts-border-brown, $lightness: -12%);
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.from-user .bubble {
+  background: color.adjust($ts-bg-cream, $lightness: -3%);
 }
 
 /* 빵집 목록 스타일 */
@@ -405,47 +554,68 @@ $ts-bg-cream: #fffaf0;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 0.5rem;
   width: 100%;
-  max-width: 100%;
+  max-width: none;
 }
 
 .bakery-list-header {
   font-weight: 700;
   font-size: 1rem;
   color: $ts-border-brown;
-  margin-bottom: 0.25rem;
   padding-bottom: 0.5rem;
-  border-bottom: 2px solid rgba(210, 105, 30, 0.3);
+  border-bottom: 2px solid $ts-border-brown;
 }
 
-.bakery-button {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem;
-  background: $ts-bg-cream;
-  border: 2px solid $ts-border-brown;
+/* ✨ 공유하기 버튼 스타일 ✨ */
+.share-to-post-button {
+  background: linear-gradient(135deg, #ff6b9d 0%, #ffa06b 100%);
+  color: white;
+  border: none;
   border-radius: 0.75rem;
+  padding: 0.85rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
-  text-align: left;
-
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(255, 107, 157, 0.3);
+  
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-    border-color: color.adjust($ts-border-brown, $lightness: -10%);
+    box-shadow: 0 6px 16px rgba(255, 107, 157, 0.4);
   }
-
+  
   &:active {
     transform: translateY(0);
   }
 }
 
+.bakery-button {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: white;
+  border: 2px solid $ts-border-brown;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+
+  &:hover {
+    background: $ts-bg-cream;
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  &:active {
+    transform: translateX(2px);
+  }
+}
+
 .bakery-number {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 2rem;
+  height: 2rem;
   background: $ts-border-brown;
   color: white;
   border-radius: 50%;
@@ -460,13 +630,14 @@ $ts-bg-cream: #fffaf0;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
 .bakery-name {
-  font-weight: 700;
-  font-size: 1rem;
-  color: #333;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: $ts-text-brown;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -474,89 +645,80 @@ $ts-bg-cream: #fffaf0;
 
 .bakery-rating {
   font-size: 0.85rem;
-  color: #ff8c00;
+  color: #f59e0b;
 }
 
 .bakery-location {
   font-size: 0.85rem;
-  color: #666;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bakery-address {
-  color: #888;
+  color: #9ca3af;
 }
 
 /* 로딩 */
 .ts-chat-loading {
   text-align: center;
-  padding: 1rem;
-  font-size: 1.1rem;
+  font-size: 0.9rem;
+  color: #9ca3af;
+  padding: 0.5rem;
 }
 
-/* 하단 입력 영역 */
+/* 입력 영역 */
 .ts-chat-footer {
-  margin-top: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .ts-error {
   color: #dc2626;
-  font-size: 0.9rem;
-  margin: 0 0 0.25rem 0;
+  font-size: 0.85rem;
+  margin: 0;
 }
 
 .ts-input {
   width: 100%;
-  min-height: 60px;
-  max-height: 140px;
-  padding: 0.8rem 1rem;
-  border: 3px solid $ts-border-brown;
+  padding: 0.85rem 1rem;
+  border: 2px solid $ts-border-brown;
   border-radius: 0.75rem;
-  resize: vertical;
-  font-family: inherit;
   font-size: 0.95rem;
-  line-height: 1.4;
-  background: #fff;
+  resize: vertical;
+  min-height: 3.5rem;
+  font-family: inherit;
 
   &:focus {
     outline: none;
-    border-color: color.adjust($ts-border-brown, $lightness: -15%);
+    border-color: color.adjust($ts-border-brown, $lightness: -10%);
+    box-shadow: 0 0 0 3px rgba($ts-border-brown, 0.1);
   }
 }
 
 .ts-send-button {
-  width: 100%;
-  padding: 0.85rem;
-  border: 3px solid $ts-border-brown;
-  background: #ff69b4;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 700;
+  align-self: flex-end;
+  background: $ts-border-brown;
+  color: white;
+  border: none;
+  padding: 0.75rem 2rem;
   border-radius: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
-  box-shadow: 0 5px 0 color.adjust(#ff69b4, $lightness: -22%);
+  transition: all 0.2s ease;
 
   &:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 7px 0 color.adjust(#ff69b4, $lightness: -22%);
-  }
-
-  &:active:not(:disabled) {
-    transform: translateY(0);
-    box-shadow: 0 3px 0 color.adjust(#ff69b4, $lightness: -22%);
+    background: color.adjust($ts-border-brown, $lightness: -8%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba($ts-border-brown, 0.3);
   }
 
   &:disabled {
-    background: #ccc;
-    border-color: #999;
+    opacity: 0.5;
     cursor: not-allowed;
-    box-shadow: 0 3px 0 #999;
   }
 }
 </style>
