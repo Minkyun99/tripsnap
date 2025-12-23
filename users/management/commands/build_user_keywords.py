@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 
 from users.models import Post
+
 from . import model_ver11  # 같은 폴더의 model_ver11.py 사용
 
 User = get_user_model()
@@ -24,8 +25,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         limit = options.get("limit")
+        # 1) model_ver11.py가 있는 디렉터리 기준으로 경로 잡기
 
-        # 1) model_ver11.py가 있는 디렉터리 기준으로 경로 설정
         model_dir = os.path.dirname(model_ver11.__file__)
 
         base_kw_path = os.path.join(model_dir, model_ver11.BASE_KEYWORD_PATH)
@@ -37,13 +38,13 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR(f"base_keywords.json 없음: {base_kw_path}"))
             return
 
+
         if not os.path.exists(new_kw_path):
             self.stdout.write(self.style.WARNING(f"new_keyword.json 없음(무시하고 진행): {new_kw_path}"))
         if not os.path.exists(dessert_meta_path):
             self.stdout.write(
                 self.style.WARNING(f"dessert_en.json 없음(매장 메타 없이 진행): {dessert_meta_path}")
             )
-
         self.stdout.write(self.style.WARNING(f"키워드 설정 로드: {base_kw_path} / {new_kw_path}"))
 
         # 3) 키워드 설정 로드
