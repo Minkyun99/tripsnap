@@ -20,7 +20,7 @@ class Command(BaseCommand):
             '--file',
             type=str,
             default='./chatbot/dessert.json',
-            help='Path to JSON file (default: ./chatbot/dessert.json)'
+            help='Path to JSON file (default: ./chatbot/dessert_en.json)'
         )
         parser.add_argument(
             '--clear',
@@ -64,9 +64,7 @@ class Command(BaseCommand):
         for idx, data in enumerate(bakeries_data, 1):
             try:
                 # rating 딕셔너리에서 개별 필드로 추출
-                rating = data.get('rating', {})
-                kakao_rate = rating.get('kakao_rate', '') if isinstance(rating, dict) else ''
-                naver_rate = rating.get('naver_rate', '') if isinstance(rating, dict) else ''
+                rating = data.get('rating', '') if isinstance(rating, dict) else ''
 
                 # keywords 리스트를 쉼표로 구분된 문자열로 변환
                 keywords_list = data.get('keywords', [])
@@ -93,8 +91,7 @@ class Command(BaseCommand):
                         'url': data.get('url', ''),
                         'latitude': data.get('latitude') or None,
                         'longitude': data.get('longitude') or None,
-                        'kakao_rate': kakao_rate,
-                        'naver_rate': naver_rate,
+                        'rate': rating,
                         'keywords': keywords_str,
                     }
                 )
