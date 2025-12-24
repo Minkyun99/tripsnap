@@ -1,18 +1,28 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiJson } from '@/utils/api'
 import { getCsrfToken } from '@/utils/csrf'
 import { useUserStore } from '@/stores/users'
+import { useAdminStore } from '@/stores/admin'
 
 const router = useRouter()
 const userStore = useUserStore()
+const adminStore = useAdminStore()
+
+// ---------------------------
+// 관리자 여부 (이메일 기준)
+// ---------------------------
+const isAdmin = computed(() => {
+  const u = userStore.user
+  return !!u && u.email === 'tripsnap@tripsnap.com'
+})
 
 // ---------------------------
 // 팔로우 공개 범위 (3단계)
 // ---------------------------
 // public: 모두 공개
-// following_only: 내가 팔로우한 사람에게만 공개 (백엔드 허용 값에 맞춤)
+// following_only: 내가 팔로우한 사람에게만 공개
 // private: 완전 비공개
 const followVisibility = ref('public')
 const followVisibilityMsg = ref('')
@@ -36,6 +46,13 @@ const delMsg = ref('')
 const delErr = ref('')
 const delLoading = ref(false)
 
+// ---------------------------
+// 사용자 키워드 재빌드
+// ---------------------------
+const keywordBuildMsg = ref('')
+const keywordBuildErr = ref('')
+const keywordBuildLoading = ref(false)
+
 // ✅ 초기 로드: 서버에서 현재 follow_visibility 조회해서 라디오에 반영
 onMounted(async () => {
   await userStore.fetchMe().catch(() => {})
@@ -44,51 +61,49 @@ onMounted(async () => {
   followVisibilityErr.value = ''
 
   try {
-    // ✅ 설정 전용 엔드포인트 사용 (값: public|following_only|private)
     const data = await userStore.fetchFollowVisibility()
     if (data?.follow_visibility) {
       followVisibility.value = data.follow_visibility
     }
   } catch (e) {
-    // 설정 API가 아직 연결 안 되었을 때도 페이지는 동작해야 하므로, 에러만 표시
     followVisibilityErr.value = e?.message || '현재 설정을 불러오지 못했습니다.'
   }
 })
 
+// ---------------------------
+// 팔로우 공개 범위 저장
+// ---------------------------
 async function saveFollowVisibility() {
   followVisibilityMsg.value = ''
   followVisibilityErr.value = ''
 
   try {
-    // ✅ 설정 전용 저장 API 사용
-    const data = await userStore.updateFollowVisibility(followVisibility.value)
-    if (data?.follow_visibility) {
-      followVisibility.value = data.follow_visibility // 서버가 저장한 값으로 동기화
-    }
-    followVisibilityMsg.value = '저장되었습니다.'
+    const data = await apiJson('/users/api/settings/follow-visibility/', {
+      method: 'POST',
+      body: JSON.stringify({
+        follow_visibility: followVisibility.value,
+      }),
+    })
+
+    followVisibilityMsg.value =
+      data?.detail || '팔로우 공개 범위가 저장되었습니다.'
   } catch (e) {
-    followVisibilityErr.value = e?.message || '저장에 실패했습니다.'
+    followVisibilityErr.value =
+      e?.message || '팔로우 공개 범위 저장에 실패했습니다.'
   }
 }
 
+// ---------------------------
+// 비밀번호 변경
+// ---------------------------
 async function changePassword() {
   pwMsg.value = ''
   pwErr.value = ''
   pwLoading.value = true
 
   try {
-    if (!currentPassword.value || !newPassword1.value || !newPassword2.value) {
-      throw new Error('모든 비밀번호 입력칸을 채워주세요.')
-    }
-    if (newPassword1.value !== newPassword2.value) {
-      throw new Error('새 비밀번호가 서로 일치하지 않습니다.')
-    }
-
-    const csrftoken = getCsrfToken()
-
     await apiJson('/api/auth/password/change/', {
       method: 'POST',
-      headers: { 'X-CSRFToken': csrftoken },
       body: JSON.stringify({
         old_password: currentPassword.value,
         new_password1: newPassword1.value,
@@ -107,6 +122,9 @@ async function changePassword() {
   }
 }
 
+// ---------------------------
+// 회원 탈퇴
+// ---------------------------
 async function deleteAccount() {
   delMsg.value = ''
   delErr.value = ''
@@ -119,16 +137,16 @@ async function deleteAccount() {
 
     const csrftoken = getCsrfToken()
 
-    // ✅ 기존에 사용 중인 엔드포인트 유지
     await apiJson('/users/delete/', {
       method: 'POST',
-      headers: { 'X-CSRFToken': csrftoken },
-      body: JSON.stringify({}),
+      headers: {
+        'X-CSRFToken': csrftoken,
+      },
     })
 
     delMsg.value = '회원 탈퇴가 완료되었습니다.'
-    await userStore.logout().catch(() => {})
-    router.push({ name: 'home' }).catch(() => {})
+    await userStore.logout()
+    router.push({ name: 'home' })
   } catch (e) {
     delErr.value = e?.message || '회원 탈퇴에 실패했습니다.'
   } finally {
@@ -136,24 +154,43 @@ async function deleteAccount() {
   }
 }
 
+// ---------------------------
+// 사용자 키워드 추출 버튼 동작 (관리자 전용)
+// ---------------------------
+async function onClickBuildUserKeywords() {
+  keywordBuildMsg.value = ''
+  keywordBuildErr.value = ''
+  keywordBuildLoading.value = true
+
+  try {
+    const data = await adminStore.buildUserKeywords()
+    keywordBuildMsg.value =
+      data?.detail || '사용자 키워드 추출 작업이 실행되었습니다.'
+  } catch (e) {
+    keywordBuildErr.value =
+      e?.message || '사용자 키워드 추출 작업 실행에 실패했습니다.'
+  } finally {
+    keywordBuildLoading.value = false
+  }
+}
 
 function goBackToMyProfile() {
-  router.push({ name: 'profile' }).catch(() => {})
+  router.push({ name: 'profile' })
 }
 </script>
 
 <template>
   <main class="ts-settings-page">
-    
     <div class="ts-shell">
-      <!-- ✅ 뒤로가기 버튼 -->
-    <button
-      class="ts-back-btn"
-      type="button"
-      @click="goBackToMyProfile"
-    >
-      👈 내 프로필로
-    </button>
+      <!-- 뒤로가기 버튼 -->
+      <button
+        class="ts-back-btn"
+        type="button"
+        @click="goBackToMyProfile"
+      >
+        👈 내 프로필로
+      </button>
+
       <section class="ts-card pixel-corners">
         <header class="ts-settings-header">
           <h2 class="ts-title">설정</h2>
@@ -172,8 +209,11 @@ function goBackToMyProfile() {
             </label>
 
             <label class="ts-radio">
-              <!-- ✅ value를 followers -> following_only 로 변경 -->
-              <input type="radio" value="following_only" v-model="followVisibility" />
+              <input
+                type="radio"
+                value="following_only"
+                v-model="followVisibility"
+              />
               <span>팔로우한 사람에게만 공개</span>
             </label>
 
@@ -184,22 +224,81 @@ function goBackToMyProfile() {
           </div>
 
           <div class="ts-row">
-            <button class="ts-btn ts-btn--pink" type="button" @click="saveFollowVisibility">
+            <button
+              class="ts-btn ts-btn--pink"
+              type="button"
+              @click="saveFollowVisibility"
+            >
               저장
             </button>
-            <span v-if="followVisibilityMsg" class="ts-ok">{{ followVisibilityMsg }}</span>
-            <span v-if="followVisibilityErr" class="ts-err">{{ followVisibilityErr }}</span>
+            <span v-if="followVisibilityMsg" class="ts-ok">
+              {{ followVisibilityMsg }}
+            </span>
+            <span v-if="followVisibilityErr" class="ts-err">
+              {{ followVisibilityErr }}
+            </span>
           </div>
         </div>
 
         <hr class="ts-divider" />
 
+        <!-- ✅ 관리자 전용: 사용자 키워드 계산 -->
+        <div
+          v-if="isAdmin"
+          class="ts-block"
+        >
+          <h3 class="ts-block-title">사용자 키워드 계산</h3>
+          <p class="ts-muted">
+            모든 사용자의 DB 데이터를 기반으로, 추천에 사용할 사용자 키워드를 다시 계산합니다.
+          </p>
+
+          <div
+            v-if="keywordBuildErr"
+            class="ts-alert ts-alert--err"
+          >
+            {{ keywordBuildErr }}
+          </div>
+          <div
+            v-if="keywordBuildMsg"
+            class="ts-alert ts-alert--ok"
+          >
+            {{ keywordBuildMsg }}
+          </div>
+
+          <div class="ts-row">
+            <button
+              class="ts-btn ts-btn--pink"
+              type="button"
+              :disabled="keywordBuildLoading"
+              @click="onClickBuildUserKeywords"
+            >
+              <span v-if="keywordBuildLoading">계산 중...</span>
+              <span v-else>키워드 계산하기</span>
+            </button>
+          </div>
+        </div>
+
+        <hr
+          v-if="isAdmin"
+          class="ts-divider"
+        />
+
         <!-- 비밀번호 변경 -->
         <div class="ts-block">
           <h3 class="ts-block-title">비밀번호 변경</h3>
 
-          <div v-if="pwErr" class="ts-alert ts-alert--err">{{ pwErr }}</div>
-          <div v-if="pwMsg" class="ts-alert ts-alert--ok">{{ pwMsg }}</div>
+          <div
+            v-if="pwErr"
+            class="ts-alert ts-alert--err"
+          >
+            {{ pwErr }}
+          </div>
+          <div
+            v-if="pwMsg"
+            class="ts-alert ts-alert--ok"
+          >
+            {{ pwMsg }}
+          </div>
 
           <div class="ts-form">
             <label class="ts-label">현재 비밀번호</label>
@@ -248,11 +347,25 @@ function goBackToMyProfile() {
             입력하세요.
           </p>
 
-          <div v-if="delErr" class="ts-alert ts-alert--err">{{ delErr }}</div>
-          <div v-if="delMsg" class="ts-alert ts-alert--ok">{{ delMsg }}</div>
+          <div
+            v-if="delErr"
+            class="ts-alert ts-alert--err"
+          >
+            {{ delErr }}
+          </div>
+          <div
+            v-if="delMsg"
+            class="ts-alert ts-alert--ok"
+          >
+            {{ delMsg }}
+          </div>
 
           <div class="ts-form">
-            <input class="ts-input" v-model="deleteConfirm" placeholder="탈퇴" />
+            <input
+              class="ts-input"
+              v-model="deleteConfirm"
+              placeholder="탈퇴"
+            />
             <button
               class="ts-btn ts-btn--danger"
               type="button"
@@ -390,7 +503,6 @@ function goBackToMyProfile() {
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
 }
-/* 저장 / 일반 버튼 */
 .ts-btn--pink {
   background: #e89c5d;
   color: #fff;
@@ -400,7 +512,6 @@ function goBackToMyProfile() {
   background: #cd7b38;
   border-color: #c07233;
 }
-/* 🔥 회원탈퇴 버튼 */
 .ts-btn--danger {
   background: #c34646;
   border-color: #c34646;
@@ -410,7 +521,6 @@ function goBackToMyProfile() {
   background: #a83232;
   border-color: #a83232;
 }
-/* 비활성화 */
 .ts-btn:disabled {
   opacity: 0.6;
   cursor: default;
@@ -418,7 +528,6 @@ function goBackToMyProfile() {
 .ts-danger {
   color: #b00020;
 }
-/* ✅ 통일감 있는 뒤로가기 버튼 스타일 */
 .ts-back-btn {
   margin-bottom: 5px;
   display: inline-flex;

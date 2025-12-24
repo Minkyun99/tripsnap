@@ -10,6 +10,7 @@ urlpatterns = [
 
     # ✅ 설정 페이지
     path('settings/', views.settings_view, name='settings'),
+    path("api/me/", views.current_user_or_guest, name="current_user_or_guest"),
     
     # ===== 프로필 =====
     path('profile/', views.user_profile, name='user_profile'),
@@ -66,5 +67,11 @@ urlpatterns = [
    # ✅ 추천 빵집 API (HomeView.vue에서 사용)
     path('api/recommended-bakeries/', views.recommended_bakeries_api, name='recommended_bakeries_api'),
 
+    # 설정 화면에서 키워드 빌드 트리거
+    path(
+        "api/settings/build-user-keywords/",
+        views.build_user_keywords_api,
+        name="build_user_keywords_api",
+    ),
 
 ]

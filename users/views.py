@@ -4,6 +4,8 @@ import base64
 import json
 import random
 import uuid
+import traceback
+import logging
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, logout
@@ -12,6 +14,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth import update_session_auth_hash
 from django.core.files.base import ContentFile
 from django.http import JsonResponse
+from django.views.decorators.http import require_GET
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST, require_http_methods
@@ -23,6 +26,11 @@ from .forms import CustomUserCreationForm
 from .models import Profile, Post, PostImage, Like, Comment, Social
 from chatbot.models import Bakery
 from .serializers import PostSerializer
+
+from django.core.management import call_command
+from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -86,6 +94,32 @@ def _can_view_follow_list(viewer: User, owner: User) -> bool:
 
     # following_only
     return (viewer == owner) or Social.objects.filter(follower=owner, following=viewer).exists()
+
+
+@require_GET
+def current_user_or_guest(request):
+    """
+    로그인되어 있으면 사용자 정보 + is_authenticated=True
+    비로그인이어도 200 OK + is_authenticated=False 를 내려주는 엔드포인트
+    """
+    if request.user.is_authenticated:
+        u = request.user
+        data = {
+            "is_authenticated": True,
+            "user": {
+                "id": u.id,
+                "email": u.email,
+                "username": getattr(u, "username", "") or "",
+                "nickname": getattr(u, "nickname", "") or "",
+            },
+        }
+    else:
+        data = {
+            "is_authenticated": False,
+            "user": None,
+        }
+
+    return JsonResponse(data)
 
 
 def _profile_payload(request, target_user: User):
@@ -946,3 +980,57 @@ def recommended_bakeries_api(request):
 
     return JsonResponse({"results": results})
 
+
+@login_required
+@require_http_methods(["POST"])
+def build_user_keywords_api(request):
+    """
+    POST /users/api/settings/build-user-keywords/
+    관리자(tripsnap@tripsnap.com)만 호출 가능.
+    """
+    # ✅ 관리자 체크
+    if request.user.email != "tripsnap@tripsnap.com":
+        return JsonResponse(
+            {"success": False, "detail": "권한이 없습니다."},
+            status=403,
+        )
+
+    # ✅ (선택) limit 옵션을 JSON body 로 받을 수 있게 처리
+    limit = None
+    try:
+      if request.body:
+          payload = json.loads(request.body.decode("utf-8"))
+          limit = payload.get("limit")
+    except Exception:
+        # body 파싱 실패해도 limit 없이 그냥 진행
+        pass
+
+    try:
+        cmd_kwargs = {}
+        if limit is not None:
+            cmd_kwargs["limit"] = int(limit)
+
+        # 🔥 여기서 management command 실행
+        call_command("build_user_keywords", **cmd_kwargs)
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        logger.error("build_user_keywords command failed: %s\n%s", e, tb)
+
+        # ✅ 프론트에서 디버깅할 수 있도록 에러 메시지와 트레이스백을 내려줌
+        return JsonResponse(
+            {
+                "success": False,
+                "detail": f"키워드 추출 중 오류가 발생했습니다: {e}",
+                "traceback": tb,
+            },
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "detail": "사용자 키워드 추출 작업이 정상적으로 실행되었습니다.",
+            "ran_at": timezone.now().isoformat(),
+        }
+    )
