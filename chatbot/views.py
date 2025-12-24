@@ -65,6 +65,9 @@ def chat_init(request):
     dates = (data.get('dates') or '').strip()
     transport = (data.get('transport') or '').strip()
 
+    # 🔍 디버깅: 받은 키워드 로그
+    logger.info(f"🎯 [INIT] 받은 키워드 - preference: '{preference}', region: '{region}', dates: '{dates}', transport: '{transport}'")
+
     # ✨ 모든 키워드는 선택 사항 - 필수 검증 제거
     # 사용자가 아무것도 선택하지 않아도 챗봇 시작 가능
 
@@ -78,6 +81,8 @@ def chat_init(request):
         'transport': transport,
     }
     
+    logger.info(f"💾 [INIT] 저장할 메타 데이터: {meta}")
+    
     # META 시스템 메시지 저장
     Message.objects.create(
         conversation=conv,
@@ -85,9 +90,24 @@ def chat_init(request):
         content='__META__:' + json.dumps(meta, ensure_ascii=False),
     )
 
-    # 안내용 초기 봇 메시지 - 선택한 키워드에 따라 다른 메시지
-    if preference:
-        summary = f"선택하신 키워드: {preference}"
+    # 안내용 초기 봇 메시지 - 선택한 모든 키워드를 보여줌
+    selected_items = []
+    
+    if preference and preference != '상관없음':
+        selected_items.append(f"선호: {preference}")
+    
+    if region and region != '대전 전체':
+        selected_items.append(f"지역: {region}")
+    
+    if dates and dates != '상관없음':
+        selected_items.append(f"날짜: {dates}")
+    
+    if transport and transport != '상관없음':
+        selected_items.append(f"이동수단: {transport}")
+    
+    # 선택한 키워드가 있으면 표시, 없으면 환영 메시지
+    if selected_items:
+        summary = f"선택하신 키워드:\n• " + "\n• ".join(selected_items)
         prompt = "원하시는 것을 더 자세히 설명해주시겠어요? 그냥 추천해달라고 하시면 바로 추천을 시작할게요."
     else:
         summary = "안녕하세요! 대전 빵집 추천 챗봇입니다. 😊"
