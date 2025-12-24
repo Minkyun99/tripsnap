@@ -1,27 +1,6 @@
 // src/stores/users.js
 import { defineStore } from 'pinia'
-import { getCsrfToken } from '@/utils/csrf.js'
-
-const API_BASE = import.meta.env.VITE_API_BASE || ''
-
-async function parseErrorMessage(res, fallbackMessage) {
-  let message = fallbackMessage
-  try {
-    const data = await res.json()
-
-    if (data?.detail) return data.detail
-
-    const firstField = data && typeof data === 'object' ? Object.keys(data)[0] : null
-    if (firstField) {
-      const v = data[firstField]
-      if (Array.isArray(v) && v.length > 0) return String(v[0])
-      if (typeof v === 'string') return v
-    }
-  } catch {
-    // ignore
-  }
-  return message
-}
+import { apiJson } from '@/utils/api.js'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -56,29 +35,21 @@ export const useUserStore = defineStore('user', {
       this.isLoadingRecommendedBakeries = true
 
       try {
-        const res = await fetch(`${API_BASE}/users/api/recommended-bakeries/`, {
-          credentials: 'include',
-        })
+        try {
+          const data = await apiJson('/users/api/recommended-bakeries/')
+          const rawList = data.results || []
 
-        if (res.status === 401 || res.status === 403) {
+          const picked = this._pickRandomBakeries(rawList, maxCount)
+          this.recommendedBakeries = picked
+          return picked
+        } catch (err) {
           // 비로그인 또는 권한 없음 → 추천 목록 비움
-          this.recommendedBakeries = []
-          return []
+          if (err.message?.includes('401') || err.message?.includes('403')) {
+            this.recommendedBakeries = []
+            return []
+          }
+          throw err
         }
-
-        if (!res.ok) {
-          const msg = await parseErrorMessage(res, '추천 빵집을 불러오지 못했습니다.')
-          this.error = msg
-          this.recommendedBakeries = []
-          return []
-        }
-
-        const data = await res.json()
-        const rawList = data.results || []
-
-        const picked = this._pickRandomBakeries(rawList, maxCount)
-        this.recommendedBakeries = picked
-        return picked
       } catch (err) {
         console.error('fetchRecommendedBakeries error:', err)
         this.error = err?.message ?? '추천 빵집을 불러오는 중 오류가 발생했습니다.'
@@ -94,20 +65,10 @@ export const useUserStore = defineStore('user', {
       this.error = null
 
       try {
-        const res = await fetch(`${API_BASE}/api/auth/registration/`, {
+        await apiJson('/api/auth/registration/', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken(),
-          },
-          credentials: 'include',
           body: JSON.stringify({ email, password1, password2 }),
         })
-
-        if (!res.ok) {
-          const msg = await parseErrorMessage(res, '회원가입에 실패했습니다.')
-          throw new Error(msg)
-        }
 
         await this.fetchMe()
         return true
@@ -125,22 +86,10 @@ export const useUserStore = defineStore('user', {
       this.error = null
 
       try {
-        const res = await fetch(`${API_BASE}/api/auth/login/`, {
+        await apiJson('/api/auth/login/', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken(),
-          },
-          credentials: 'include',
           body: JSON.stringify({ email, password }),
         })
-
-        if (!res.ok) {
-          const msg = await parseErrorMessage(res, '로그인에 실패했습니다.')
-          this.user = null
-          this.error = msg
-          return false
-        }
 
         await this.fetchMe()
         return true
@@ -158,21 +107,7 @@ export const useUserStore = defineStore('user', {
       this.error = null
 
       try {
-        const res = await fetch(`${API_BASE}/api/auth/user/`, {
-          credentials: 'include',
-        })
-
-        if (res.status === 401 || res.status === 403) {
-          this.user = null
-          return null
-        }
-
-        if (!res.ok) {
-          const msg = await parseErrorMessage(res, '유저 정보를 가져오는 중 오류가 발생했습니다.')
-          throw new Error(msg)
-        }
-
-        const data = await res.json()
+        const data = await apiJson('/api/auth/user/')
         this.user = data
         return data
       } catch (err) {
@@ -189,20 +124,10 @@ export const useUserStore = defineStore('user', {
       this.error = null
 
       try {
-        const res = await fetch(`${API_BASE}/api/auth/password/change/`, {
+        await apiJson('/api/auth/password/change/', {
           method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken(),
-          },
           body: JSON.stringify({ old_password, new_password1, new_password2 }),
         })
-
-        if (!res.ok) {
-          const msg = await parseErrorMessage(res, '비밀번호 변경에 실패했습니다.')
-          throw new Error(msg)
-        }
 
         return true
       } catch (err) {
@@ -218,20 +143,10 @@ export const useUserStore = defineStore('user', {
       this.error = null
 
       try {
-        const res = await fetch(`${API_BASE}/users/api/account/delete/`, {
+        await apiJson('/users/api/account/delete/', {
           method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken(),
-          },
           body: JSON.stringify({}),
         })
-
-        if (!res.ok) {
-          const msg = await parseErrorMessage(res, '회원 탈퇴에 실패했습니다.')
-          throw new Error(msg)
-        }
 
         this.user = null
         return true
@@ -244,8 +159,9 @@ export const useUserStore = defineStore('user', {
     },
 
     startKakaoLogin() {
+      // API_BASE 없이 상대경로 사용
       const next = encodeURIComponent('/auth/kakao/complete')
-      window.location.href = `${API_BASE}/accounts/kakao/login/?next=${next}`
+      window.location.href = `/accounts/kakao/login/?next=${next}`
     },
 
     async logout() {
@@ -253,20 +169,10 @@ export const useUserStore = defineStore('user', {
       this.error = null
 
       try {
-        const res = await fetch(`${API_BASE}/api/auth/logout/`, {
+        await apiJson('/api/auth/logout/', {
           method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken(),
-          },
           body: JSON.stringify({}),
         })
-
-        if (!res.ok) {
-          const msg = await parseErrorMessage(res, '로그아웃에 실패했습니다.')
-          console.warn('logout not ok:', msg)
-        }
       } catch (err) {
         console.error('logout error:', err)
       } finally {
@@ -277,14 +183,11 @@ export const useUserStore = defineStore('user', {
 
     // ✅ 팔로우 목록 공개 범위 조회
     async fetchFollowVisibility() {
-      const res = await fetch(`${API_BASE}/users/api/settings/follow-visibility/`, {
-        credentials: 'include',
-      })
-      if (!res.ok) {
-        const msg = await parseErrorMessage(res, '설정 정보를 불러오지 못했습니다.')
-        throw new Error(msg)
+      try {
+        return await apiJson('/users/api/settings/follow-visibility/')
+      } catch (err) {
+        throw new Error(err?.message ?? '설정 정보를 불러오지 못했습니다.')
       }
-      return await res.json()
     },
 
     // ✅ 팔로우 목록 공개 범위 저장
@@ -297,21 +200,10 @@ export const useUserStore = defineStore('user', {
         throw new Error('follow_visibility 값이 올바르지 않습니다.')
       }
 
-      const res = await fetch(`${API_BASE}/users/api/settings/follow-visibility/`, {
+      return await apiJson('/users/api/settings/follow-visibility/', {
         method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrfToken(),
-        },
         body: JSON.stringify({ follow_visibility: normalized }),
       })
-
-      if (!res.ok) {
-        const msg = await parseErrorMessage(res, '공개 범위 변경에 실패했습니다.')
-        throw new Error(msg)
-      }
-      return await res.json()
     },
   },
 })

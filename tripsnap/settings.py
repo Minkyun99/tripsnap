@@ -18,8 +18,15 @@ if env_path.is_file():
     env.read_env(env_path, overwrite=True)
 
 SECRET_KEY = os.environ.get("django_secret_key")
-DEBUG = True
-ALLOWED_HOSTS = ["43.201.75.252", "localhost", "127.0.0.1"]
+DEBUG = False  # 에러 발생 시 노란색 에러 화면(코드 유출 위험)이 나오지 않도록 반드시 False로 바꿔야 합니다.
+ALLOWED_HOSTS = [
+    "tripsnap.shop", 
+    "www.tripsnap.shop", 
+    "43.201.75.252", 
+    "localhost", 
+    "127.0.0.1",
+    # "marvelous-faun-4b98d8.netlify.app" # 단일 도메인 사용 시 제외 가능
+]
 
 # ===============================================
 # Applications
@@ -147,9 +154,9 @@ REST_AUTH = {
     "USE_JWT": True,
     "JWT_AUTH_COOKIE": "jwt-auth",
     "JWT_AUTH_REFRESH_COOKIE": "jwt-refresh",
-    "JWT_AUTH_HTTPONLY": False,
-    "JWT_AUTH_SECURE": False,  # ✅ 개발환경
-    "JWT_AUTH_SAMESITE": "Lax",  # ✅ 추가
+    "JWT_AUTH_HTTPONLY": False,  # 프론트엔드 JS 접근 허용
+    "JWT_AUTH_SECURE": True,    # HTTPS 환경 필수
+    "JWT_AUTH_SAMESITE": "Lax",  # 동일 도메인이므로 Lax로 간소화
     "USER_DETAILS_SERIALIZER": "users.serializers.UserSerializer",
     "REGISTER_SERIALIZER": "users.serializers.CustomRegisterSerializer",
     "LOGIN_SERIALIZER": "users.serializers.CustomLoginSerializer",
@@ -223,9 +230,9 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_COOKIE": "jwt-auth",
     "AUTH_COOKIE_REFRESH": "jwt-refresh",
-    "AUTH_COOKIE_SECURE": False,     # 개발환경
-    "AUTH_COOKIE_HTTP_ONLY": False,  # 개발 편의(운영에서는 True 권장)
-    "AUTH_COOKIE_SAMESITE": "Lax",
+    "AUTH_COOKIE_SECURE": True,
+    "AUTH_COOKIE_SAMESITE": "Lax", # 동일 도메인이므로 Lax
+    "AUTH_COOKIE_HTTP_ONLY": True,
 }
 
 # ===============================================
@@ -234,24 +241,41 @@ SIMPLE_JWT = {
 OPENAI_API_KEY = env.str("OPENAI_API_KEY", default=None)
 
 # ===============================================
-# Session
+# Session / Cookie 통합 설정 (간소화 버전)
 # ===============================================
 SESSION_COOKIE_AGE = 86400
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
+# 동일 도메인(tripsnap.shop) 통합 배포 환경 설정
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = False 
+SESSION_COOKIE_HTTPONLY = True
+
 # ===============================================
-# CORS / CSRF (Vue dev server)
+# CORS / CSRF (Vue dev server & Production)
 # ===============================================
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://marvelous-faun-4b98d8.netlify.app",
+    "https://tripsnap.shop",
+    "https://www.tripsnap.shop"
 ]
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://marvelous-faun-4b98d8.netlify.app",
+    "https://tripsnap.shop",
+    "https://www.tripsnap.shop"
 ]
+
+# 카카오 로그인 리다이렉트 주소
+SOCIAL_AUTH_KAKAO_REDIRECT_URI = 'https://tripsnap.shop/accounts/kakao/login/callback/'
+
+# 보안 설정: 프록시(Nginx)를 통해 들어오는 HTTPS 요청을 인식하도록 함
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# SECURE_SSL_REDIRECT = True  # Nginx에서 리다이렉트를 처리하므로 필요한 경우에만 켜기

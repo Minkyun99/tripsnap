@@ -4,9 +4,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
 import { useChatStore } from '../stores/chatbot'
-import { getCsrfToken } from '../utils/csrf'
-
-const API_BASE = import.meta.env.VITE_API_BASE
+import { apiJson } from '../utils/api'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -98,12 +96,6 @@ const startChat = async () => {
     return
   }
 
-  const csrftoken = getCsrfToken()
-  if (!csrftoken) {
-    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
-    return
-  }
-
   isLoading.value = true
 
   try {
@@ -112,13 +104,8 @@ const startChat = async () => {
     // dates: "YYYY-MM-DD ~ YYYY-MM-DD" 형태로 전송
     const datesString = `${startDate.value} ~ ${endDate.value}`
 
-    const res = await fetch(`${API_BASE}/chatbot/init/`, {
+    const data = await apiJson('/chatbot/init/', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrftoken,
-      },
-      credentials: 'include',
       body: JSON.stringify({
         preference: preferenceString,
         region: region.value,
@@ -126,19 +113,6 @@ const startChat = async () => {
         transport: transport.value,
       }),
     })
-
-    if (!res.ok) {
-      let detail = '챗봇 초기화 중 오류가 발생했습니다.'
-      try {
-        const data = await res.json()
-        if (data.detail) detail = data.detail
-      } catch {
-        // HTML 응답일 경우 json 파싱 실패 → 기본 메시지 유지
-      }
-      throw new Error(detail)
-    }
-
-    const data = await res.json()
 
     // Pinia store에 초기 대화 상태 세팅
     chatStore.reset()

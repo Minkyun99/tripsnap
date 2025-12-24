@@ -1,10 +1,9 @@
-<!-- src/views/ChatbotView.vue -->
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
 import { useChatStore } from '../stores/chatbot'
-import { getCsrfToken } from '../utils/csrf'
+import { apiFetch, apiJson } from '../utils/api'
 import BakeryModal from './BakeryModal.vue'
 import CreatePostModal from '../components/profile/CreatePostModal.vue'
 
@@ -66,13 +65,7 @@ const sendMessage = async () => {
     return
   }
 
-  const csrftoken = getCsrfToken()
-  console.log('4. CSRF 토큰:', csrftoken ? '있음' : '없음')
-  
-  if (!csrftoken) {
-    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다.'
-    return
-  }
+  // [수정] getCsrfToken() 호출부 삭제 (apiJson 내부에서 자동으로 처리됨)
 
   console.log('5. 사용자 메시지 추가 시도')
   chatStore.appendMessage('user', content)
@@ -83,17 +76,13 @@ const sendMessage = async () => {
 
   try {
     console.log('7. API 요청 시작')
-    console.log('   - Endpoint:', `${API_BASE}/chatbot/chat/`)
+    console.log('   - Endpoint:', `/chatbot/chat/`)
     console.log('   - conversationId:', conversationId.value)
     console.log('   - message:', content)
     
-    const res = await fetch(`${API_BASE}/chatbot/chat/`, {
+    // apiJson이 내부적으로 credentials: 'include'와 X-CSRFToken 헤더를 관리합니다.
+    const data = await apiJson('/chatbot/chat/', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrftoken,
-      },
-      credentials: 'include',
       body: JSON.stringify({
         message: content,
         conversation_id: conversationId.value,
@@ -101,18 +90,10 @@ const sendMessage = async () => {
       }),
     })
 
-    console.log('8. API 응답 상태:', res.status, res.statusText)
-
-    if (!res.ok) {
-      throw new Error('서버 응답 오류')
-    }
-
-    const data = await res.json()
-    console.log('9. API 응답 데이터:', data)
+    console.log('8. API 응답:', data)
 
     if (data.llm_response) {
       console.log('10. LLM 응답 메시지 추가')
-      // results가 있으면 함께 저장
       if (data.results) {
         console.log('11. 검색 결과 있음:', data.results.length, '개')
         chatStore.appendMessage('bot', data.llm_response, data.results)
@@ -144,10 +125,6 @@ const handleKeydown = (e) => {
 // 빵집 버튼 클릭 처리
 const handleBakeryClick = async (bakery) => {
   console.log('=== 빵집 클릭 디버깅 ===')
-  console.log('전체 bakery 객체:', bakery)
-  console.log('bakery.id:', bakery.id)
-  console.log('bakery.name:', bakery.name)
-  console.log('bakery.place_name:', bakery.place_name)
   
   if (!bakery.id) {
     console.log('❌ bakery.id가 없음!')
@@ -155,38 +132,19 @@ const handleBakeryClick = async (bakery) => {
     return
   }
 
-  const csrftoken = getCsrfToken()
-  if (!csrftoken) {
-    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다.'
-    return
-  }
+  // [수정] getCsrfToken() 호출부 삭제 (apiJson 내부에서 자동으로 처리됨)
 
   try {
     // 빵집 상세 정보 가져오기
-    const res = await fetch(`${API_BASE}/chatbot/bakery/${bakery.id}/`, {
-      method: 'GET',
-      credentials: 'include',
-    })
+    const detailData = await apiJson(`/chatbot/bakery/${bakery.id}/`)
 
-    if (!res.ok) {
-      throw new Error('빵집 정보를 가져오는데 실패했습니다.')
-    }
-
-    const detailData = await res.json()
     selectedBakery.value = detailData
 
     // 댓글 가져오기
-    const commentsRes = await fetch(
-      `${API_BASE}/chatbot/bakery/${bakery.id}/comments/`,
-      {
-        method: 'GET',
-        credentials: 'include',
-      }
-    )
-
-    if (commentsRes.ok) {
-      bakeryComments.value = await commentsRes.json()
-    } else {
+    try {
+      const comments = await apiJson(`/chatbot/bakery/${bakery.id}/comments/`)
+      bakeryComments.value = comments
+    } catch {
       bakeryComments.value = []
     }
 
@@ -212,30 +170,11 @@ const closeBakeryModal = () => {
 const toggleBakeryLike = async () => {
   if (!selectedBakery.value) return
 
-  const csrftoken = getCsrfToken()
-  if (!csrftoken) {
-    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다.'
-    return
-  }
-
   try {
-    const res = await fetch(
-      `${API_BASE}/chatbot/bakery/${selectedBakery.value.id}/like/`,
-      {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': csrftoken,
-        },
-        credentials: 'include',
-      }
-    )
+    const data = await apiJson(`/chatbot/bakery/${selectedBakery.value.id}/like/`, {
+      method: 'POST',
+    })
 
-    if (!res.ok) {
-      throw new Error('좋아요 처리에 실패했습니다.')
-    }
-
-    const data = await res.json()
-    
     // 상태 업데이트
     selectedBakery.value.is_liked = data.is_liked
     selectedBakery.value.like_count = data.like_count
@@ -250,31 +189,14 @@ const toggleBakeryLike = async () => {
 const submitBakeryComment = async (content) => {
   if (!selectedBakery.value || !content.trim()) return
 
-  const csrftoken = getCsrfToken()
-  if (!csrftoken) {
-    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다.'
-    return
-  }
-
   try {
-    const res = await fetch(
-      `${API_BASE}/chatbot/bakery/${selectedBakery.value.id}/comments/create/`,
+    const data = await apiJson(
+      `/chatbot/bakery/${selectedBakery.value.id}/comments/create/`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrftoken,
-        },
-        credentials: 'include',
         body: JSON.stringify({ content }),
       }
     )
-
-    if (!res.ok) {
-      throw new Error('댓글 작성에 실패했습니다.')
-    }
-
-    const data = await res.json()
     
     // 댓글 목록 맨 위에 추가 (최신순)
     bakeryComments.value.unshift(data)
@@ -362,18 +284,14 @@ const closeCreatePostModal = () => {
           <div class="bubble">
             <span v-if="m.role === 'user'">👤 {{ m.text }}</span>
             
-            <!-- ✨ 봇 응답: LLM 텍스트와 빵집 목록 둘 다 표시 -->
             <div v-else-if="m.role === 'bot'">
-              <!-- LLM 텍스트 응답 -->
               <div v-if="m.text && m.text !== '__BAKERY_LIST__'" class="bot-text">
                 🤖 {{ m.text }}
               </div>
               
-              <!-- 빵집 목록이 있는 경우 버튼으로 표시 -->
               <div v-if="m.results" class="bakery-list">
                 <div class="bakery-list-header">📍 추천 빵집 목록</div>
                 
-                <!-- ✨ 공유하기 버튼 ✨ -->
                 <button 
                   class="share-to-post-button"
                   @click="shareToPost(m.results)"
@@ -426,7 +344,6 @@ const closeCreatePostModal = () => {
       </div>
     </div>
 
-    <!-- 빵집 모달 -->
     <BakeryModal
       v-if="showBakeryModal"
       :bakery="selectedBakery"
@@ -437,7 +354,6 @@ const closeCreatePostModal = () => {
       @go-profile="goToBakeryProfile"
     />
 
-    <!-- ✨ 게시글 작성 모달 ✨ -->
     <CreatePostModal
       v-if="showCreatePostModal"
       :prefilled-title="'🍞 챗봇 추천 빵집 여행'"
@@ -468,7 +384,6 @@ $ts-bg-cream: #fffaf0;
   flex-direction: column;
 }
 
-/* 헤더 영역 */
 .ts-chat-header {
   display: flex;
   flex-direction: column;
@@ -489,7 +404,6 @@ $ts-bg-cream: #fffaf0;
   margin: 0;
 }
 
-/* 메시지 영역 */
 .ts-chat-body {
   flex: 1;
   overflow-y: auto;
@@ -529,16 +443,13 @@ $ts-bg-cream: #fffaf0;
   background: color.adjust($ts-bg-cream, $lightness: -3%);
 }
 
-/* 빵집 목록 스타일 */
 .bakery-list {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   width: 100%;
-  max-width: none;
 }
 
-/* ✨ 봇 텍스트와 빵집 목록 간격 */
 .bot-text {
   margin-bottom: 1rem;
   white-space: pre-wrap;
@@ -553,7 +464,6 @@ $ts-bg-cream: #fffaf0;
   border-bottom: 2px solid $ts-border-brown;
 }
 
-/* ✨ 공유하기 버튼 스타일 ✨ */
 .share-to-post-button {
   background: linear-gradient(135deg, #ff6b9d 0%, #ffa06b 100%);
   color: white;
@@ -569,10 +479,6 @@ $ts-bg-cream: #fffaf0;
   &:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(255, 107, 157, 0.4);
-  }
-  
-  &:active {
-    transform: translateY(0);
   }
 }
 
@@ -592,10 +498,6 @@ $ts-bg-cream: #fffaf0;
     background: $ts-bg-cream;
     transform: translateX(4px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
-
-  &:active {
-    transform: translateX(2px);
   }
 }
 
@@ -643,11 +545,6 @@ $ts-bg-cream: #fffaf0;
   white-space: nowrap;
 }
 
-.bakery-address {
-  color: #9ca3af;
-}
-
-/* 로딩 */
 .ts-chat-loading {
   text-align: center;
   font-size: 0.9rem;
@@ -655,7 +552,6 @@ $ts-bg-cream: #fffaf0;
   padding: 0.5rem;
 }
 
-/* 입력 영역 */
 .ts-chat-footer {
   display: flex;
   flex-direction: column;
@@ -676,13 +572,6 @@ $ts-bg-cream: #fffaf0;
   font-size: 0.95rem;
   resize: vertical;
   min-height: 3.5rem;
-  font-family: inherit;
-
-  &:focus {
-    outline: none;
-    border-color: color.adjust($ts-border-brown, $lightness: -10%);
-    box-shadow: 0 0 0 3px rgba($ts-border-brown, 0.1);
-  }
 }
 
 .ts-send-button {
@@ -695,13 +584,6 @@ $ts-bg-cream: #fffaf0;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover:not(:disabled) {
-    background: color.adjust($ts-border-brown, $lightness: -8%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba($ts-border-brown, 0.3);
-  }
 
   &:disabled {
     opacity: 0.5;

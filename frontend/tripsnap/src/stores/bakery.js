@@ -1,8 +1,6 @@
 // src/stores/bakery.js
 import { defineStore } from 'pinia'
-import { getCsrfToken } from '@/utils/csrf.js'
-
-const API_BASE = import.meta.env.VITE_API_BASE || ''
+import { apiFetch, apiJson } from '@/utils/api.js'
 
 export const useBakeryStore = defineStore('bakery', {
   state: () => ({
@@ -43,20 +41,7 @@ export const useBakeryStore = defineStore('bakery', {
       }
 
       try {
-        const res = await fetch(`${API_BASE}/chatbot/bakery/${bakeryId}/`, {
-          credentials: 'include',
-        })
-
-        if (!res.ok) {
-          console.error(
-            '베이커리 상세 불러오기 실패:',
-            res.status,
-            await res.text(),
-          )
-          return null
-        }
-
-        const data = await res.json()
+        const data = await apiJson(`/chatbot/bakery/${bakeryId}/`)
 
         // 캐시 및 현재 모달용 데이터에 저장 (위도/경도 포함 풀 데이터)
         this.bakeryCache[bakeryId] = data
@@ -165,24 +150,8 @@ export const useBakeryStore = defineStore('bakery', {
       this.modalLoadingComments = true
 
       try {
-        const res = await fetch(
-          `${API_BASE}/chatbot/bakery/${bakeryId}/comments/`,
-          {
-            credentials: 'include',
-          },
-        )
+        const data = await apiJson(`/chatbot/bakery/${bakeryId}/comments/`)
 
-        if (!res.ok) {
-          console.error(
-            '댓글 불러오기 실패:',
-            res.status,
-            await res.text(),
-          )
-          this.modalComments = []
-          return
-        }
-
-        const data = await res.json()
         // 배열 / {results: []} / {comments: []} 모두 대응
         if (Array.isArray(data)) {
           this.modalComments = data
@@ -207,33 +176,10 @@ export const useBakeryStore = defineStore('bakery', {
 
       this.modalTogglingLike = true
       try {
-        const csrftoken = getCsrfToken()
-        if (!csrftoken) {
-          console.error('CSRF 토큰 없음: 좋아요 토글 불가')
-          return
-        }
+        const data = await apiJson(`/chatbot/bakery/${this.modalBakery.id}/like/`, {
+          method: 'POST',
+        })
 
-        const res = await fetch(
-          `${API_BASE}/chatbot/bakery/${this.modalBakery.id}/like/`,
-          {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-              'X-CSRFToken': csrftoken,
-            },
-          },
-        )
-
-        if (!res.ok) {
-          console.error(
-            '좋아요 토글 실패:',
-            res.status,
-            await res.text(),
-          )
-          return
-        }
-
-        const data = await res.json()
         // 예: { is_liked: true, like_count: 10 } 형태라고 가정
         const updated = {
           ...this.modalBakery,
@@ -273,35 +219,13 @@ export const useBakeryStore = defineStore('bakery', {
 
       this.modalSubmittingComment = true
       try {
-        const csrftoken = getCsrfToken()
-        if (!csrftoken) {
-          console.error('CSRF 토큰 없음: 댓글 작성 불가')
-          return
-        }
-
-        const res = await fetch(
-          `${API_BASE}/chatbot/bakery/${this.modalBakery.id}/comments/create/`,
+        const data = await apiJson(
+          `/chatbot/bakery/${this.modalBakery.id}/comments/create/`,
           {
             method: 'POST',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': csrftoken,
-            },
             body: JSON.stringify({ content: text }),
-          },
+          }
         )
-
-        if (!res.ok) {
-          console.error(
-            '댓글 작성 실패:',
-            res.status,
-            await res.text(),
-          )
-          return
-        }
-
-        const data = await res.json()
 
         // 예: { comment: {...} } or 바로 {...} 로 내려온다고 가정
         const newComment = data.comment || data

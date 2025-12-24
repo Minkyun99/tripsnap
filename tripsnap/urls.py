@@ -20,8 +20,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import TemplateView
 from django.shortcuts import redirect
+import os
 
 from users import views as users_views
+
+FRONT_URL = os.getenv('FRONT_URL', 'http://localhost:5173')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -56,7 +59,7 @@ urlpatterns = [
 
 
     # ✅ 2) 카카오 로그인 완료 착지 URL (settings.LOGIN_REDIRECT_URL과 일치)
-    path('auth/kakao/complete', lambda request: redirect('http://localhost:5173/'), name='kakao_complete'),
+    path('auth/kakao/complete', lambda request: redirect(f"{FRONT_URL}/"), name='kakao_complete'),
 
 
 ]
