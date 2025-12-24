@@ -65,11 +65,8 @@ def chat_init(request):
     dates = (data.get('dates') or '').strip()
     transport = (data.get('transport') or '').strip()
 
-    if not preference:
-        return Response(
-            {'detail': 'preference(선호 키워드)는 필수입니다.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    # ✨ 모든 키워드는 선택 사항 - 필수 검증 제거
+    # 사용자가 아무것도 선택하지 않아도 챗봇 시작 가능
 
     # Conversation 생성
     conv = Conversation.objects.create(user=user)
@@ -88,9 +85,13 @@ def chat_init(request):
         content='__META__:' + json.dumps(meta, ensure_ascii=False),
     )
 
-    # 안내용 초기 봇 메시지
-    summary = f"선택하신 키워드: {preference}"
-    prompt = "원하시는 것을 더 자세히 설명해주시겠어요? 그냥 추천해달라고 하시면 바로 추천을 시작할게요."
+    # 안내용 초기 봇 메시지 - 선택한 키워드에 따라 다른 메시지
+    if preference:
+        summary = f"선택하신 키워드: {preference}"
+        prompt = "원하시는 것을 더 자세히 설명해주시겠어요? 그냥 추천해달라고 하시면 바로 추천을 시작할게요."
+    else:
+        summary = "안녕하세요! 대전 빵집 추천 챗봇입니다. 😊"
+        prompt = "어떤 빵집을 찾으시나요? 원하시는 조건을 자유롭게 말씀해주세요!"
 
     Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=summary)
     Message.objects.create(conversation=conv, sender=Message.SENDER_BOT, content=prompt)

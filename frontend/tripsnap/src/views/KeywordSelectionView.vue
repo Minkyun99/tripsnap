@@ -29,8 +29,8 @@ const preferenceOptions = [
   { value: '에그타르트', label: '에그타르트', emoji: '🥧' },
 ]
 
-// 기본으로 1개는 선택해 둠
-const selectedPreferences = ref([''])
+// 기본으로는 아무것도 선택되지 않음 (모두 선택 사항)
+const selectedPreferences = ref([])
 
 /**
  * 2) 지역: 대전 내 구만 선택
@@ -86,31 +86,30 @@ const startChat = async () => {
     return
   }
 
-  if (selectedPreferences.value.length === 0) {
-    errorMessage.value = '최소 한 개 이상의 선호 키워드를 선택해주세요.'
-    return
-  }
-
-  if (!startDate.value || !endDate.value) {
-    errorMessage.value = '여행 시작일과 종료일을 모두 선택해주세요.'
-    return
-  }
+  // ✨ 모든 키워드는 선택적(optional)이므로 필수 검증 제거
+  // 사용자가 아무것도 선택하지 않아도 챗봇 시작 가능
 
   isLoading.value = true
 
   try {
     // preference: 여러 키워드를 ", "로 합쳐서 하나의 문자열로 전송
-    const preferenceString = selectedPreferences.value.join(', ')
-    // dates: "YYYY-MM-DD ~ YYYY-MM-DD" 형태로 전송
-    const datesString = `${startDate.value} ~ ${endDate.value}`
+    // 빈 배열이면 "상관없음"을 기본값으로 전송 (백엔드 필수 검증 통과용)
+    const preferenceString = selectedPreferences.value.filter(p => p).length > 0
+      ? selectedPreferences.value.filter(p => p).join(', ')
+      : '상관없음'
+    
+    // dates: 날짜가 있으면 "YYYY-MM-DD ~ YYYY-MM-DD" 형태, 없으면 "상관없음"
+    const datesString = (startDate.value && endDate.value) 
+      ? `${startDate.value} ~ ${endDate.value}` 
+      : '상관없음'
 
     const data = await apiJson('/chatbot/init/', {
       method: 'POST',
       body: JSON.stringify({
         preference: preferenceString,
-        region: region.value,
+        region: region.value || '대전 전체',  // 빈 값이면 기본값
         dates: datesString,
-        transport: transport.value,
+        transport: transport.value || '상관없음',  // 빈 값이면 기본값
       }),
     })
 
@@ -143,8 +142,8 @@ const startChat = async () => {
 
       <!-- 1. 선호 키워드 (최대 3개) -->
       <section class="kw-section">
-        <h3 class="section-title">1. 어떤 빵집을 찾으시나요? (최대 3개 선택)</h3>
-        <p class="section-sub">가장 끌리는 키워드를 최대 3개까지 선택해주세요.</p>
+        <h3 class="section-title">1. 어떤 빵집을 찾으시나요? (선택 사항, 최대 3개)</h3>
+        <p class="section-sub">가장 끌리는 키워드를 선택해주세요. 선택하지 않아도 됩니다.</p>
         <div class="chip-group">
           <button
             v-for="opt in preferenceOptions"
@@ -162,8 +161,8 @@ const startChat = async () => {
 
       <!-- 2. 지역: 대전 구 선택 -->
       <section class="kw-section">
-        <h3 class="section-title">2. 대전의 어느 구로 가시나요?</h3>
-        <p class="section-sub">대전 안에서 이동하실 구를 골라주세요.</p>
+        <h3 class="section-title">2. 대전의 어느 구로 가시나요? (선택 사항)</h3>
+        <p class="section-sub">대전 안에서 이동하실 구를 골라주세요. 선택하지 않아도 됩니다.</p>
         <div class="chip-group chip-group--scroll">
           <button
             v-for="opt in regionOptions"
@@ -180,8 +179,8 @@ const startChat = async () => {
 
       <!-- 3. 날짜: 달력 from - to -->
       <section class="kw-section">
-        <h3 class="section-title">3. 언제 떠나시나요?</h3>
-        <p class="section-sub">여행 시작일과 종료일을 달력에서 선택해주세요.</p>
+        <h3 class="section-title">3. 언제 떠나시나요? (선택 사항)</h3>
+        <p class="section-sub">여행 시작일과 종료일을 달력에서 선택해주세요. 선택하지 않아도 됩니다.</p>
         <div class="date-range">
           <div class="date-field">
             <label class="date-label">출발일</label>
@@ -197,7 +196,7 @@ const startChat = async () => {
 
       <!-- 4. 이동수단 -->
       <section class="kw-section">
-        <h3 class="section-title">4. 이동 수단을 알려주세요</h3>
+        <h3 class="section-title">4. 이동 수단을 알려주세요 (선택 사항)</h3>
         <div class="chip-group">
           <button
             v-for="opt in transportOptions"
@@ -228,8 +227,7 @@ const startChat = async () => {
           <span v-else>선택 완료하고 채팅 시작하기</span>
         </button>
         <p class="helper-text">
-          나중에 채팅 중에도 "취향 다시 고를래"라고 말씀하시면, 새로운 키워드로 다시 추천을
-          도와드릴게요.
+          💡 모든 항목은 선택 사항입니다. 원하는 키워드만 골라도 좋고, 아무것도 선택하지 않아도 챗봇과 대화할 수 있어요!
         </p>
       </div>
     </div>
