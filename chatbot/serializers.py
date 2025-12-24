@@ -5,7 +5,8 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 class ChatInitSerializer(serializers.Serializer):
-    preference = serializers.CharField(max_length=100)
+    """챗봇 초기화 시리얼라이저 - 모든 필드는 선택 사항"""
+    preference = serializers.CharField(max_length=100, required=False, allow_blank=True)
     region = serializers.CharField(max_length=100, required=False, allow_blank=True)
     dates = serializers.CharField(max_length=100, required=False, allow_blank=True)
     transport = serializers.CharField(max_length=100, required=False, allow_blank=True)

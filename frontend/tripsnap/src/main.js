@@ -5,7 +5,6 @@ import App from './App.vue'
 import router from './router'
 import { apiFetch } from '@/utils/api'
 
-import './assets/profile.scss'
 import './assets/style.scss'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
@@ -30,8 +29,11 @@ async function initCsrf() {
   }
 }
 
+import '@/assets/globals.scss'
+
 async function bootstrap() {
   await initCsrf()
+
 
   const app = createApp(App)
 

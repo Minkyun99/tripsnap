@@ -1,209 +1,198 @@
+<!-- src/views/SearchView.vue -->
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiJson } from '../utils/api'
+import { storeToRefs } from 'pinia'
+import { useProfileStore } from '@/stores/profile'
 
 const router = useRouter()
+const profileStore = useProfileStore()
 
-const q = ref('')
-const isLoading = ref(false)
-const error = ref('')
-const results = ref([])
+// Pinia state 참조
+const { searchSuggestions, searchIsLoading, searchError } = storeToRefs(profileStore)
 
-async function onSearch() {
-  error.value = ''
-  const query = q.value.trim()
-  if (!query) {
-    results.value = []
+const query = ref('')
+let typingTimer = null // 디바운스용
+
+// keyup 시 자동완성 호출 (디바운스)
+const onKeyup = () => {
+  if (typingTimer) {
+    clearTimeout(typingTimer)
+  }
+  typingTimer = setTimeout(() => {
+    profileStore.suggestProfiles(query.value)
+  }, 200)
+}
+
+// 자동완성 항목 클릭 시, 친구 프로필 페이지로 이동
+const selectUser = (user) => {
+  if (!user?.nickname) return
+  router.push(`/profile/${encodeURIComponent(user.nickname)}`)
+}
+
+// 엔터 입력 시: 자동완성 1순위로 이동, 없으면 기존 searchProfile 사용
+const onEnter = async () => {
+  const list = searchSuggestions.value || []
+  if (list.length > 0) {
+    selectUser(list[0])
     return
   }
 
-  isLoading.value = true
-  try {
-    // ✅ (권장) 서버에 JSON 검색 API를 추가하세요. 아래 “Django 추가 API” 참고
-    // GET /api/users/search/?q=...
-    const data = await apiJson(`/api/users/search/?q=${encodeURIComponent(query)}`)
-    results.value = data.results || []
-  } catch (e) {
-    error.value = e.message
-    results.value = []
-  } finally {
-    isLoading.value = false
-  }
-}
+  const q = query.value.trim()
+  if (!q) return
 
-function goProfile(nickname) {
-  router.push({ name: 'profile-detail', params: { nickname } })
+  try {
+    const nickname = await profileStore.searchProfile(q)
+    router.push(`/profile/${encodeURIComponent(nickname)}`)
+  } catch (e) {
+    // searchProfile 내부에서 에러 메시지를 던지므로,
+    // 여기서는 alert이나 별도 처리를 원하면 추가
+    alert(e.message || '사용자를 찾을 수 없습니다.')
+  }
 }
 </script>
 
 <template>
-  <div class="ts-search-page">
-    <div class="ts-search-card pixel-corners">
-      <h2 class="ts-search-title">프로필 검색</h2>
+  <div class="search-page">
+    <div class="search-card">
+      <h2 class="search-title">친구 검색</h2>
 
-      <form class="ts-search-form" @submit.prevent="onSearch">
-        <input class="ts-input" v-model="q" placeholder="닉네임 또는 이메일을 입력하세요" />
-        <button class="ts-btn ts-btn--pink" type="submit" :disabled="isLoading">
-          {{ isLoading ? '검색 중...' : '검색' }}
-        </button>
-      </form>
-
-      <p v-if="error" class="ts-error">{{ error }}</p>
-
-      <div class="ts-search-results">
-        <button
-          v-for="u in results"
-          :key="u.nickname"
-          class="ts-user-row"
-          type="button"
-          @click="goProfile(u.nickname)"
-        >
-          <div class="ts-user-avatar">
-            <img v-if="u.profile_img" :src="u.profile_img" alt="" />
-            <span v-else>🍞</span>
-          </div>
-          <div class="ts-user-meta">
-            <div class="ts-user-name">{{ u.nickname }}</div>
-            <div class="ts-user-sub">@{{ u.username }}</div>
-          </div>
-        </button>
-
-        <p v-if="!isLoading && results.length === 0 && q.trim()" class="ts-empty">
-          검색 결과가 없습니다.
-        </p>
+      <div class="search-field">
+        <input
+          v-model="query"
+          type="text"
+          placeholder="이메일, 아이디 또는 닉네임으로 검색"
+          @keyup="onKeyup"
+          @keyup.enter.prevent="onEnter"
+        />
       </div>
+
+      <!-- 에러 메시지 -->
+      <p v-if="searchError" class="search-error">
+        {{ searchError }}
+      </p>
+
+      <!-- 로딩 -->
+      <p v-if="searchIsLoading" class="search-loading">검색 중...</p>
+
+      <!-- 자동완성 목록 -->
+      <ul v-if="!searchIsLoading && searchSuggestions.length" class="suggest-list">
+        <li
+          v-for="user in searchSuggestions"
+          :key="user.nickname || user.email"
+          class="suggest-item"
+          @click="selectUser(user)"
+        >
+          <div class="suggest-main">
+            <span class="suggest-nickname">{{ user.nickname }}</span>
+            <span class="suggest-username" v-if="user.username"> @{{ user.username }} </span>
+          </div>
+          <div class="suggest-email">
+            {{ user.email }}
+          </div>
+        </li>
+      </ul>
+
+      <!-- 결과 없음 -->
+      <p v-else-if="query && !searchIsLoading && !searchError" class="no-result">
+        검색 결과가 없습니다.
+      </p>
     </div>
   </div>
 </template>
 
-<style scoped lang="scss">
-$ts-border-brown: #d2691e;
-$ts-text-brown: #8b4513;
-$ts-cream: #fff5e6;
-$ts-pink: #ff69b4;
-$ts-pink-hover: #ff1493;
-
-.pixel-corners {
-  border-radius: 1.25rem;
-}
-
-.ts-search-page {
-  padding: 1rem;
-}
-.ts-search-card {
-  max-width: 44rem;
+<style scoped>
+.search-page {
+  max-width: 480px;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.92);
-  border: 4px solid $ts-border-brown;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.14);
+  padding: 1.5rem 1rem;
+}
+
+.search-card {
+  background: #ffffff;
+  border-radius: 1rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
   padding: 1.5rem;
 }
 
-.ts-search-title {
-  margin: 0 0 1rem;
-  color: $ts-border-brown;
-  font-weight: 900;
-  font-size: 1.6rem;
-}
-
-.ts-search-form {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  background: $ts-cream;
-  border: 1px solid rgba(210, 105, 30, 0.35);
-  padding: 0.85rem;
-  border-radius: 0.95rem;
-}
-
-.ts-input {
-  flex: 1;
-  padding: 0.65rem 0.85rem;
-  border-radius: 0.7rem;
-  border: 1px solid rgba(0, 0, 0, 0.18);
-  background: #fff;
-}
-.ts-input:focus {
-  outline: none;
-  border-color: $ts-pink;
-  box-shadow: 0 0 0 3px rgba(255, 105, 180, 0.18);
-}
-
-.ts-btn {
-  padding: 0.65rem 1rem;
-  border-radius: 0.7rem;
-  font-weight: 900;
-  border: 2px solid $ts-border-brown;
-  cursor: pointer;
-}
-.ts-btn--pink {
-  background: $ts-pink;
-  color: #fff;
-}
-.ts-btn--pink:hover {
-  background: $ts-pink-hover;
-}
-.ts-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.ts-error {
-  margin-top: 0.75rem;
-  color: #b00020;
+.search-title {
+  font-size: 1.4rem;
   font-weight: 700;
+  margin-bottom: 1rem;
 }
 
-.ts-search-results {
-  margin-top: 1rem;
-  display: grid;
-  gap: 0.5rem;
-}
-
-.ts-user-row {
+.search-field input {
   width: 100%;
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  padding: 0.8rem;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: #fff;
-  cursor: pointer;
-  text-align: left;
-}
-.ts-user-row:hover {
-  border-color: rgba(210, 105, 30, 0.5);
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.6rem;
+  border: 1px solid #d1d5db;
+  font-size: 0.95rem;
 }
 
-.ts-user-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: #ffe8cc;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-}
-.ts-user-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.search-field input:focus {
+  outline: none;
+  border-color: #d2691e;
+  box-shadow: 0 0 0 3px rgba(210, 105, 30, 0.18);
 }
 
-.ts-user-name {
-  font-weight: 900;
-  color: $ts-border-brown;
+.search-error {
+  margin-top: 0.5rem;
+  color: #b91c1c;
+  font-size: 0.85rem;
 }
-.ts-user-sub {
+
+.search-loading {
+  margin-top: 0.5rem;
   font-size: 0.85rem;
   color: #6b7280;
 }
 
-.ts-empty {
-  margin-top: 0.75rem;
+.suggest-list {
+  list-style: none;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  border-radius: 0.6rem;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.suggest-item {
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  background: #fff;
+}
+
+.suggest-item + .suggest-item {
+  border-top: 1px solid #f3f4f6;
+}
+
+.suggest-item:hover {
+  background: #f9fafb;
+}
+
+.suggest-main {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.suggest-nickname {
+  font-weight: 700;
+}
+
+.suggest-username {
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.suggest-email {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.no-result {
+  margin-top: 0.7rem;
+  font-size: 0.85rem;
   color: #9ca3af;
 }
 </style>

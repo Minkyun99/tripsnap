@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+# model_ver11.py
+=======
 # users/management/commands/model_ver11.py
+>>>>>>> 6659f074816ef37861eea81d700b05e3497380d2
 # ------------------------------------------------------------
 # KoELECTRA 멀티라벨 키워드 추출 모델 (빵집/카페 리뷰용)
 # - ver10 개선 + 부정 문맥(하지 않다/없다 등) 처리 강화
@@ -804,6 +808,7 @@ def run_kfold_training(
         avg_loss = total_loss / max(steps, 1)
         print(f"[FULL] Epoch {epoch}/{EPOCHS} - loss: {avg_loss:.4f}")
 
+
     # 최종 모델 저장 경로는 "현재 작업 디렉터리" 기준
     torch.save(
         {
@@ -1166,13 +1171,11 @@ def main():
     args = parser.parse_args()
 
     set_seed(42)
-
     # model_ver11.py 파일이 있는 디렉터리 기준으로 경로 보정
     model_dir = os.path.dirname(__file__)
     base_kw_path = os.path.join(model_dir, BASE_KEYWORD_PATH)
     new_kw_path = os.path.join(model_dir, NEW_KEYWORD_PATH)
     dessert_meta_path = os.path.join(model_dir, DESSERT_META_PATH)
-
     if args.mode == "train":
         print("============================================================")
         print("🍞 KoELECTRA 키워드 추출 모델 학습 시작 (ver11)")

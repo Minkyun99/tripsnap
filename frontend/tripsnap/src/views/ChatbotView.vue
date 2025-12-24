@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useUserStore } from '../stores/users'
 import { useChatStore } from '../stores/chatbot'
 import { apiFetch, apiJson } from '../utils/api'
@@ -41,6 +41,52 @@ onMounted(() => {
   // conversationId 가 없으면 키워드 선택 화면으로 되돌리기
   if (!conversationId.value) {
     router.push({ name: 'chat_keywords' })
+  }
+
+  // 🔄 새로고침 또는 창 닫기 시 확인
+  const handleBeforeUnload = (e) => {
+    const hasMessages = messages.value && messages.value.length > 0
+    
+    if (hasMessages) {
+      // 표준 확인 메시지 (브라우저마다 다를 수 있음)
+      e.preventDefault()
+      e.returnValue = '채팅 기록이 초기화됩니다. 페이지를 나가시겠습니까?'
+      return e.returnValue
+    }
+  }
+  
+  window.addEventListener('beforeunload', handleBeforeUnload)
+  
+  // 컴포넌트 언마운트 시 이벤트 리스너 제거
+  onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload)
+  })
+})
+
+// 🔙 뒤로가기 또는 다른 페이지로 이동 시 확인
+onBeforeRouteLeave((to, from, next) => {
+  // 키워드 선택 페이지로 가는 경우는 확인하지 않음 (이미 확인했으므로)
+  if (to.name === 'chat_keywords') {
+    next()
+    return
+  }
+  
+  // 다른 페이지로 이동하는 경우 확인
+  const hasMessages = messages.value && messages.value.length > 0
+  
+  if (hasMessages) {
+    const confirmed = confirm(
+      '채팅 기록이 초기화됩니다. 페이지를 나가시겠습니까?'
+    )
+    
+    if (confirmed) {
+      chatStore.reset()
+      next()
+    } else {
+      next(false) // 이동 취소
+    }
+  } else {
+    next()
   }
 })
 
@@ -264,14 +310,40 @@ const closeCreatePostModal = () => {
   prefilledPostContent.value = ''
   sharedBakeryData.value = []  // ✨ 빵집 데이터 초기화
 }
+
+// 🔄 키워드 다시 선택하기
+const resetAndGoToKeywords = () => {
+  const confirmed = confirm(
+    '채팅 기록이 초기화됩니다. 키워드 선택 화면으로 돌아가시겠습니까?'
+  )
+  
+  if (confirmed) {
+    // 채팅 스토어 초기화
+    chatStore.reset()
+    
+    // 키워드 선택 화면으로 이동
+    router.push({ name: 'chat_keywords' })
+  }
+}
 </script>
 
 <template>
   <div>
     <div class="ts-chat-wrapper">
       <div class="ts-chat-header">
-        <h2>TripSnap 챗봇</h2>
-        <p v-if="displayName">{{ displayName }} 님을 위한 빵집 여행 도우미</p>
+        <div class="header-top">
+          <div class="header-title">
+            <h2>TripSnap 챗봇</h2>
+            <p v-if="displayName">{{ displayName }} 님을 위한 빵집 여행 도우미</p>
+          </div>
+          <button 
+            class="reset-keywords-btn"
+            @click="resetAndGoToKeywords"
+            title="키워드 다시 선택하기"
+          >
+            🔄 키워드 재선택
+          </button>
+        </div>
       </div>
 
       <div class="ts-chat-body">
@@ -385,10 +457,21 @@ $ts-bg-cream: #fffaf0;
 }
 
 .ts-chat-header {
+  margin-bottom: 1rem;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.header-title {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  margin-bottom: 1rem;
 }
 
 .ts-chat-header h2 {
@@ -402,6 +485,30 @@ $ts-bg-cream: #fffaf0;
   font-size: 0.95rem;
   color: #6b7280;
   margin: 0;
+}
+
+.reset-keywords-btn {
+  flex-shrink: 0;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #ff6b9d 0%, #ffa06b 100%);
+  border: none;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 10px rgba(255, 107, 157, 0.3);
+  white-space: nowrap;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(255, 107, 157, 0.4);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
 }
 
 .ts-chat-body {
@@ -588,6 +695,34 @@ $ts-bg-cream: #fffaf0;
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+/* 모바일 반응형 */
+@media (max-width: 640px) {
+  .ts-chat-wrapper {
+    margin: 1rem;
+    padding: 1.25rem 1rem;
+  }
+
+  .header-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .reset-keywords-btn {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  .ts-chat-header h2 {
+    font-size: 1.4rem;
+  }
+
+  .bubble {
+    max-width: 85%;
   }
 }
 </style>

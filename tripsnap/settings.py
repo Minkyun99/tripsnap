@@ -13,6 +13,9 @@ dotenv.load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 env_path = BASE_DIR / ".env"
 
+# ✨ Vue 프론트엔드 빌드 디렉토리 경로 추가
+FRONTEND_DIR = BASE_DIR.parent / 'tripsnap_frontend' / 'dist'
+
 env = Env()
 if env_path.is_file():
     env.read_env(env_path, overwrite=True)
@@ -71,7 +74,10 @@ ROOT_URLCONF = "tripsnap.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        "DIRS": [
+            FRONTEND_DIR,  # ✨ Vue 빌드 파일 위치 (최우선)
+            BASE_DIR / "templates",  # Django 템플릿
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -121,6 +127,11 @@ USE_TZ = True
 # ===============================================
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# ✨ Vue 빌드 파일의 정적 파일 (assets 폴더) 추가
+STATICFILES_DIRS = [
+    FRONTEND_DIR / 'assets',  # Vue 빌드 시 생성되는 assets 폴더
+]
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
