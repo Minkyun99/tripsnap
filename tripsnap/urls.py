@@ -15,7 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import TemplateView
@@ -30,7 +30,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # # 메인페이지
-    path('', TemplateView.as_view(template_name='home.html'), name='home'),
+    path('', TemplateView.as_view(template_name='index.html'), name='home'),
     
     # [1] dj-rest-auth 및 소셜 로그인 시작 URL
     path('api/auth/', include('dj_rest_auth.urls')),
@@ -61,6 +61,12 @@ urlpatterns = [
     # ✅ 2) 카카오 로그인 완료 착지 URL (settings.LOGIN_REDIRECT_URL과 일치)
     path('auth/kakao/complete', lambda request: redirect(f"{FRONT_URL}/"), name='kakao_complete'),
 
+    # ✨ [SPA Catch-all] Vue Router를 위한 패턴
+    # API 경로가 아닌 모든 경로를 Vue의 index.html로 리다이렉트
+    # 주의: 이 패턴은 반드시 urlpatterns의 가장 마지막에 위치해야 함
+    re_path(r'^(?!(api|admin|accounts|media|static|auth|chatbot/init|chatbot/chat|chatbot/bakery|users)/).*$', 
+            TemplateView.as_view(template_name='index.html'), 
+            name='spa_catchall'),
 
 ]
 
