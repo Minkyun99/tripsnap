@@ -159,9 +159,9 @@ export const useUserStore = defineStore('user', {
     },
 
     startKakaoLogin() {
-      // API_BASE 없이 상대경로 사용
-      const next = encodeURIComponent('/auth/kakao/complete')
-      window.location.href = `/accounts/kakao/login/?next=${next}`
+      // ✅ process=login 파라미터 추가로 Django 중간 템플릿 건너뛰기
+      // 바로 카카오 OAuth 페이지로 리다이렉트됩니다
+      window.location.href = '/accounts/kakao/login/?process=login'
     },
 
     async logout() {

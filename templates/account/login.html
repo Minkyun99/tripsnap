@@ -1,0 +1,138 @@
+{% load i18n %}
+
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>카카오 계정 연결 - tripsnap</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        background: linear-gradient(135deg, #ffe8cc 0%, #ffdab9 100%);
+        min-height: 100vh;
+      }
+      .pixel-corners {
+        clip-path: polygon(
+          0 8px,
+          8px 8px,
+          8px 0,
+          calc(100% - 8px) 0,
+          calc(100% - 8px) 8px,
+          100% 8px,
+          100% calc(100% - 8px),
+          calc(100% - 8px) calc(100% - 8px),
+          calc(100% - 8px) 100%,
+          8px 100%,
+          8px calc(100% - 8px),
+          0 calc(100% - 8px)
+        );
+      }
+      .kakao-btn {
+        background-color: #fee500;
+        color: #191919;
+        transition: all 0.2s;
+      }
+      .kakao-btn:hover {
+        background-color: #e6cd00;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body class="flex items-center justify-center p-4">
+    <div
+      class="w-full max-w-md bg-white/95 rounded-2xl shadow-2xl border-4 border-[#D2691E] pixel-corners p-8 space-y-6"
+    >
+      <!-- 헤더 -->
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="text-3xl">🍞</span>
+          <span class="text-2xl font-extrabold text-[#D2691E]">tripsnap</span>
+        </div>
+        <a href="/" class="text-xs text-[#8B4513] underline">홈으로</a>
+      </div>
+
+      <h1 class="text-2xl md:text-3xl font-extrabold text-gray-900 text-center">
+        카카오 계정 연결
+      </h1>
+
+      {% if process == "connect" %}
+      <p class="text-center text-sm text-gray-600">
+        이 카카오 계정을
+        <span class="font-semibold text-[#D2691E]">기존 tripsnap 계정</span>에
+        연결하려고 합니다.
+      </p>
+      {% else %}
+      <p class="text-center text-sm text-gray-600">
+        카카오 계정으로
+        <span class="font-semibold text-[#D2691E]">tripsnap</span>에
+        로그인/회원가입을 진행합니다.
+      </p>
+      {% endif %}
+
+      <!-- 안내 박스 -->
+      <div
+        class="bg-[#FFE8CC]/70 border-2 border-[#D2691E] rounded-xl p-4 text-sm text-[#8B4513] space-y-1"
+      >
+        <p class="font-semibold">📌 안내</p>
+        <ul class="list-disc list-inside space-y-1 text-xs md:text-sm">
+          <li>
+            카카오에서 제공받는 프로필 정보를 이용해 계정을 생성하거나
+            로그인합니다.
+          </li>
+          <li>
+            이미 같은 이메일로 가입된 계정이 있으면 자동으로 연결될 수 있습니다.
+          </li>
+          <li>언제든지 마이페이지에서 계정 연결을 해제할 수 있습니다.</li>
+        </ul>
+      </div>
+
+      <!-- allauth 소셜 로그인 form -->
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <!-- allauth가 필요로 하는 hidden 필드들 -->
+        <div class="hidden">{{ form.as_p }}</div>
+
+        <button
+          type="submit"
+          class="kakao-btn w-full py-3 rounded-lg shadow-md flex items-center justify-center font-semibold text-base md:text-lg"
+        >
+          <img
+            src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_small.png"
+            alt="카카오"
+            class="w-5 h-5 mr-2"
+          />
+          카카오 계정으로 계속하기
+        </button>
+      </form>
+
+      <!-- 하단 액션 -->
+      <div class="flex flex-col gap-3 text-sm text-gray-600 mt-2">
+        <button
+          type="button"
+          onclick="window.location.href='/'"
+          class="w-full py-2.5 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition"
+        >
+          취소하고 홈으로 돌아가기
+        </button>
+
+        <p class="text-center text-xs text-gray-500">
+          다른 방법으로 로그인하시려면
+          <a
+            href="/accounts/login/"
+            class="font-semibold text-indigo-600 hover:text-indigo-500"
+          >
+            일반 로그인 페이지
+          </a>
+          를 이용해주세요.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

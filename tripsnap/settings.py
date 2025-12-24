@@ -75,8 +75,8 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
-            FRONTEND_DIR,  # ✨ Vue 빌드 파일 위치 (최우선)
             BASE_DIR / "templates",  # Django 템플릿
+            FRONTEND_DIR,  # ✨ Vue 빌드 파일 위치 (최우선)
         ],
         "APP_DIRS": True,
         "OPTIONS": {
@@ -189,6 +189,7 @@ ACCOUNT_LOGOUT_REDIRECT_URL = "/"
 
 ACCOUNT_ADAPTER = "users.adapters.CustomAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "users.adapters.CustomSocialAccountAdapter"
+SOCIALACCOUNT_LOGIN_ON_GET = True  # <- 이 설정이 중요합니다!
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
