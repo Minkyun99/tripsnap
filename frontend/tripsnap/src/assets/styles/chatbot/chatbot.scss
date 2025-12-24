@@ -1,0 +1,742 @@
+// src/assets/chatbot.scss
+@use 'sass:color';
+
+$ts-border-brown: #d2691e;
+$ts-text-brown: #8b4513;
+$ts-bg-cream: #fffaf0;
+/* ✅ 새로 추가: 포인트 컬러 */
+$ts-accent-pink: #ff6b9d;
+
+.ts-chat-page {
+  width: 100%;
+  min-height: calc(90vh - 4rem);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  background: radial-gradient(circle at top, #fff7eb 0, #fff 45%, #fdf7f3 100%);
+}
+
+.ts-chat-wrapper {
+  max-width: 56rem;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 1.5rem;
+  border: 3px solid $ts-border-brown;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.5);
+  padding: 1.75rem 1.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 헤더 영역 */
+.ts-chat-header {
+  margin-bottom: 1rem;
+}
+
+.ts-chat-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ts-chat-header h2 {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: $ts-border-brown;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.ts-chat-pill {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba($ts-border-brown, 0.4);
+  background: rgba($ts-bg-cream, 0.8);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: $ts-text-brown;
+}
+
+.ts-chat-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.92rem;
+  color: #6b7280;
+}
+
+.ts-chat-body {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 1.25rem;
+  padding: 0.5rem 0.25rem;
+  max-height: calc(100vh - 35rem);
+
+  /* ✅ Firefox용 베이지 톤 스크롤 설정 */
+  scrollbar-width: thin;
+  scrollbar-color: color.adjust($ts-border-brown, $lightness: 15%) #fffaf3;
+}
+
+/* ✅ WebKit 계열(Chrome/Edge/Safari) 베이지 톤 스크롤바 */
+.ts-chat-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.ts-chat-body::-webkit-scrollbar-track {
+  background: linear-gradient(
+    to bottom,
+    #fffaf3,
+    #fffdf8
+  );
+  border-radius: 999px;
+  margin: 6px 0;
+}
+
+.ts-chat-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    color.adjust($ts-border-brown, $lightness: 8%),
+    color.adjust($ts-border-brown, $lightness: -3%)
+  );
+  border-radius: 999px;
+  border: 2px solid #fffaf3;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.12);
+}
+
+.ts-chat-body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    color.adjust($ts-border-brown, $lightness: 3%),
+    color.adjust($ts-border-brown, $lightness: -8%)
+  );
+}
+
+.ts-chat-body::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(
+    180deg,
+    color.adjust($ts-border-brown, $lightness: -2%),
+    color.adjust($ts-border-brown, $lightness: -12%)
+  );
+}
+
+
+.ts-chat-message {
+  display: flex;
+  margin-bottom: 1rem;
+}
+
+.ts-chat-message.from-user {
+  justify-content: flex-end;
+}
+
+.ts-chat-message.from-bot {
+  justify-content: flex-start;
+}
+
+.bubble {
+  background: white;
+  padding: 0.85rem 1.05rem;
+  border-radius: 1.2rem;
+  max-width: 76%;
+  border: 2px solid rgba($ts-border-brown, 0.9);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #333;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  position: relative;
+}
+
+.from-user .bubble {
+  background: color.adjust($ts-bg-cream, $lightness: -2%);
+  border-color: color.adjust($ts-border-brown, $lightness: 2%);
+}
+
+.user-text {
+  display: block;
+}
+
+/* 봇 메시지 공통 */
+.bot-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.bot-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* 추천 빵집 목록 */
+.bakery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: none;
+}
+
+.bakery-list-header {
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid $ts-border-brown;
+}
+
+.bakery-list-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: $ts-border-brown;
+}
+
+.bakery-list-caption {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+/* 코스 요약 카드 */
+.course-summary {
+  margin-top: 0.4rem;
+  margin-bottom: 0.3rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.9rem;
+  background: $ts-bg-cream;
+  border: 1px dashed rgba($ts-border-brown, 0.7);
+}
+
+.course-summary-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+  color: $ts-text-brown;
+}
+
+.course-summary-list {
+  padding-left: 1.1rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+/* 공유 버튼 */
+.share-to-post-button {
+  background: linear-gradient(135deg, #ff6b9d 0%, #ffa06b 100%);
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.8rem 1.15rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(255, 107, 157, 0.35);
+  margin-top: 0.15rem;
+  margin-bottom: 0.45rem;
+  text-align: center;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(255, 107, 157, 0.45);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+/* 빵집 버튼 (요약 정보) */
+.bakery-button {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: white;
+  border: 2px solid $ts-border-brown;
+  border-radius: 0.85rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+
+  &:hover {
+    background: $ts-bg-cream;
+    transform: translateX(4px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  }
+
+  &:active {
+    transform: translateX(2px);
+  }
+}
+
+.bakery-number {
+  flex-shrink: 0;
+  width: 2.1rem;
+  height: 2.1rem;
+  background: $ts-border-brown;
+  color: white;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.bakery-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.bakery-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: $ts-text-brown;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.bakery-rating {
+  font-size: 0.85rem;
+  color: #f59e0b;
+}
+
+.bakery-location {
+  font-size: 0.85rem;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bakery-location-sep {
+  margin: 0 0.3rem;
+  color: #9ca3af;
+}
+
+.bakery-address {
+  color: #9ca3af;
+}
+
+/* 자세히 보기 버튼 */
+.detail-toggle-button {
+  margin-top: 0.25rem;
+  align-self: flex-start;
+  background: white;
+  border: 1px solid $ts-border-brown;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.82rem;
+  color: $ts-text-brown;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  &:hover {
+    background: $ts-bg-cream;
+  }
+}
+
+.visit-plan-wrapper {
+  margin-top: 0.6rem;
+}
+
+/* 방문 시간 계획 카드 */
+.visit-plan {
+  margin-top: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.9rem;
+  background: #fffdf8;
+  border: 1px solid #f5deb3;
+}
+
+.visit-plan-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: $ts-text-brown;
+  margin-bottom: 0.25rem;
+}
+
+.visit-plan-list {
+  padding-left: 1.1rem;
+  margin: 0;
+  font-size: 0.84rem;
+  color: #4b5563;
+}
+
+/* fade 애니메이션 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: all 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* 로딩 */
+.ts-chat-loading {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #9ca3af;
+  padding: 0.5rem;
+}
+
+/* 입력 영역 */
+.ts-chat-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.ts-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.ts-input-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+.ts-input {
+  flex: 1;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 2px solid $ts-border-brown;
+  border-radius: 0.9rem;
+  font-size: 0.93rem;
+  resize: vertical;
+  min-height: 3.2rem;
+  font-family: inherit;
+
+  &:focus {
+    outline: none;
+    border-color: color.adjust($ts-border-brown, $lightness: -10%);
+    box-shadow: 0 0 0 3px rgba($ts-border-brown, 0.13);
+  }
+}
+
+.ts-send-button {
+  flex-shrink: 0;
+  background: $ts-border-brown;
+  color: white;
+  border: none;
+  padding: 0.7rem 1.65rem;
+  border-radius: 0.9rem;
+  font-size: 0.93rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: color.adjust($ts-border-brown, $lightness: -8%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba($ts-border-brown, 0.35);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .ts-chat-wrapper {
+    padding: 1.2rem 1.1rem 1.1rem;
+    border-width: 2px;
+  }
+
+  .bubble {
+    max-width: 100%;
+  }
+
+  .ts-chat-body {
+    max-height: calc(100vh - 14rem);
+  }
+
+  .ts-input-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ts-send-button {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* ===============================
+   자세히 보기 / 접기 버튼
+   =============================== */
+.details-toggle-button {
+  margin-top: 0.25rem;        /* 🔥 기존보다 더 위로 붙임 */
+  align-self: flex-start;
+  background: white;
+  border: 1px solid rgba($ts-border-brown, 0.8);
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: $ts-text-brown;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+
+  &::before {
+    content: '📋';
+  }
+
+  &:hover {
+    background: $ts-bg-cream;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+/* ===============================
+   방문 시간 계획(예상) 블록
+   =============================== */
+.visit-plan-list {
+  margin-top: 0.9rem;
+  padding: 0.85rem 0.9rem 0.9rem;
+  border-radius: 1rem;
+  background: #fffdf8;
+  border: 1px solid #f5deb3;
+}
+
+.visit-plan-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: $ts-text-brown;
+  margin: 0 0 0.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+
+  &::before {
+    content: '⏰';
+    font-size: 1rem;
+  }
+}
+
+/* 개별 빵집 카드 */
+.visit-plan-item {
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.8rem;
+  background: rgba(255, 250, 240, 0.9);
+  border: 1px solid rgba($ts-border-brown, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  margin-bottom: 0.5rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.visit-plan-bakery-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: $ts-text-brown;
+  margin-bottom: 0.25rem;
+}
+
+/* 시간 표(예상 도착 시각 / 줄 서는 시간 / 머무는 시간 / 다음 이동 시각) */
+.bakery-plan-list {
+  list-style: none;
+  padding-left: 0.1rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: #4b5563;
+
+  li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    margin-bottom: 0.1rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.plan-label {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: $ts-text-brown;
+}
+
+.plan-value {
+  flex: 1;
+  color: #4b5563;
+}
+
+.bot-summary-card {
+  margin-top: 0.3rem;
+  margin-bottom: 0.4rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: #fffaf3;
+  border: 2px solid rgba($ts-border-brown, 0.7);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+}
+
+.bot-summary-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: $ts-border-brown;
+  margin-bottom: 0.45rem;
+}
+
+.bot-summary-list {
+  margin: 0 0 0.4rem 0;
+  padding-left: 1rem;
+
+  li {
+    margin-bottom: 0.25rem;
+    font-size: 0.9rem;
+  }
+}
+
+.visit-plan-list {
+  margin-top: 0.6rem;       /* 카드와의 간격 통일 */
+  padding: 0.9rem;
+  border-radius: 1rem;
+  background: #fffdf8;
+  border: 1px solid #f5deb3;
+}
+
+.visit-plan-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  margin-bottom: 0.45rem;   /* 제목과 내용 간 간격 통일 */
+}
+
+.visit-plan-item {
+  padding: 0.7rem;
+  border-radius: 0.9rem;
+  background: white;
+  border: 1px solid rgba($ts-border-brown, 0.18);
+  margin-bottom: 0.45rem;   /* 아이템 간 간격 균일화 */
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.bakery-plan-list {
+  margin: 0;
+  padding-left: 0.5rem;
+
+  li {
+    margin-bottom: 0.2rem;
+    display: flex;
+    gap: 0.25rem;
+  }
+}
+
+/* ===============================
+   공통 메시지 인너 래퍼 + 아바타
+   =============================== */
+
+.ts-message-inner {
+  display: flex;
+  align-items: flex-start; // 상단 기준 정렬
+  gap: 0.6rem;
+  width: 100%;
+}
+
+/* 사용자 메시지: 오른쪽 정렬 */
+.ts-message-user {
+  justify-content: flex-end;
+}
+
+/* 봇 메시지: 왼쪽 정렬 */
+.ts-message-bot {
+  justify-content: flex-start;
+}
+
+/* 아바타 공통 스타일 (고정 크기) */
+.ts-avatar {
+  width: 40px;   // 고정 가로
+  height: 40px;  // 고정 세로
+  border-radius: 50%;
+  border: 2px solid rgba($ts-border-brown, 0.9);
+  background: $ts-bg-cream;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* 사용자/봇 배경색만 약간 다르게 */
+.ts-avatar-user {
+  background: #fff7ec;
+}
+
+.ts-avatar-bot {
+  background: #eef2ff;
+}
+
+/* 이미지가 말려 들어가지 않게 꽉 채우기 */
+.ts-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 이모티콘 아바타 */
+.ts-avatar-emoji {
+  font-size: 1.45rem;
+}
+
+/* 자세히 보기 버튼: 본문과 간격 조정 */
+.details-toggle-button {
+  margin-top: 0.2rem; /* 본문과 더 가깝게 */
+  align-self: flex-start;
+  background: white;
+  border: 1px solid rgba($ts-border-brown, 0.8);
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: $ts-text-brown;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+
+  &:hover {
+    background: $ts-bg-cream;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
