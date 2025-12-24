@@ -4,7 +4,6 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 
-import './assets/profile.scss'
 import './assets/style.scss'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''

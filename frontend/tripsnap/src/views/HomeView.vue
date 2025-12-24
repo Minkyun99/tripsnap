@@ -133,7 +133,7 @@ watch(
           <div class="home-feature-card">
             <div class="home-feature-icon">🗺️</div>
             <h4 class="home-feature-title">지역 탐색</h4>
-            <p class="home-feature-desc">전국의 숨은 빵집을 발견해요</p>
+            <p class="home-feature-desc">대전의 숨은 빵집을 발견해요</p>
           </div>
 
           <div class="home-feature-card">

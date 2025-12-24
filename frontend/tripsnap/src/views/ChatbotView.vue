@@ -649,6 +649,6 @@ const closeCreatePostModal = () => {
 </template>
 
 <style lang="scss" scoped>
-@import '../assets/chatbot.scss';
+@import '@/assets/styles/chatbot/chatbot.scss';
 
 </style>

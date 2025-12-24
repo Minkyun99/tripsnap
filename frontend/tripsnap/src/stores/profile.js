@@ -37,7 +37,7 @@ export const useProfileStore = defineStore('profile', {
     // 403 같은 경우 “비공개 입니다.”를 표시하기 위한 메시지
     followListPrivateMessage: '',
 
-    // ✅ 친구 자동완성 검색 상태
+    // 친구 자동완성 검색 상태
     searchQuery: '',
     searchSuggestions: [],
     searchIsLoading: false,
@@ -55,12 +55,36 @@ export const useProfileStore = defineStore('profile', {
   },
 
   actions: {
+    // =====================================================
+    // 내부 헬퍼
+    // =====================================================
     _setProfilePayload(payload) {
       // payload = { profile: {...}, posts: [...] }
       this.profile = payload.profile || this.profile
       this.posts = Array.isArray(payload.posts) ? payload.posts : []
     },
 
+    _updatePostInList(updated) {
+      if (!updated) return
+      const idx = this.posts.findIndex((p) => p.id === updated.id)
+      if (idx !== -1) {
+        this.posts[idx] = { ...this.posts[idx], ...updated }
+      }
+      if (this.activePost && this.activePost.id === updated.id) {
+        this.activePost = { ...this.activePost, ...updated }
+      }
+    },
+
+    _removePostFromList(postId) {
+      this.posts = this.posts.filter((p) => p.id !== postId)
+      if (this.activePost && this.activePost.id === postId) {
+        this.closePostModal()
+      }
+    },
+
+    // =====================================================
+    // 프로필 로딩
+    // =====================================================
     async loadMyProfile() {
       this.isLoading = true
       this.error = null
@@ -89,7 +113,9 @@ export const useProfileStore = defineStore('profile', {
       }
     },
 
-    // 기존 단일 검색 API (엔터 눌렀을 때 등에서 사용 가능)
+    // =====================================================
+    // 프로필 검색/자동완성
+    // =====================================================
     async searchProfile(query) {
       const q = (query || '').trim()
       if (!q) throw new Error('검색어를 입력해주세요.')
@@ -110,7 +136,7 @@ export const useProfileStore = defineStore('profile', {
       return data.nickname
     },
 
-    // ✅ 자동완성용 API 호출
+    // 자동완성용 API 호출
     async suggestProfiles(query) {
       const q = (query || '').trim()
       this.searchQuery = q
@@ -147,6 +173,9 @@ export const useProfileStore = defineStore('profile', {
       }
     },
 
+    // =====================================================
+    // 팔로우
+    // =====================================================
     async toggleFollow(targetNickname) {
       const data = await apiJson(`/users/follow/${encodeURIComponent(targetNickname)}/ajax/`, {
         method: 'POST',
@@ -158,6 +187,9 @@ export const useProfileStore = defineStore('profile', {
       this.profile.follower_count = data.follower_count ?? this.profile.follower_count
     },
 
+    // =====================================================
+    // 게시글 좋아요
+    // =====================================================
     async toggleLike(postId) {
       const data = await apiJson(`/users/post/${postId}/like-toggle/ajax/`, {
         method: 'POST',
@@ -176,6 +208,9 @@ export const useProfileStore = defineStore('profile', {
       }
     },
 
+    // =====================================================
+    // 게시글 모달 / 이미지 모달 / 작성 모달
+    // =====================================================
     async openPostModal(post) {
       this.activePost = { ...post }
       this.postModalOpen = true
@@ -188,11 +223,158 @@ export const useProfileStore = defineStore('profile', {
       this.modalComments = []
     },
 
+    openImageModal() {
+      this.imageModalOpen = true
+    },
+
+    closeImageModal() {
+      this.imageModalOpen = false
+    },
+
+    openCreatePostModal() {
+      this.createPostModalOpen = true
+      // 새 글 작성 시에는 activePost를 비워두는 것이 자연스럽습니다.
+      this.activePost = null
+    },
+
+    closeCreatePostModal() {
+      this.createPostModalOpen = false
+    },
+
+    // =====================================================
+    // 게시글 생성 / 수정 / 삭제
+    // =====================================================
+    /**
+     * 게시글 생성
+     * payload: { title, content, images }  // images: base64 문자열 배열
+     */
+    async createPost(payload) {
+      const { title, content, images = [] } = payload || {}
+      const t = (title || '').trim()
+      const c = (content || '').trim()
+
+      if (!t || !c) {
+        throw new Error('제목과 내용을 모두 입력해주세요.')
+      }
+
+      const data = await apiJson('/users/post/create/', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: t,
+          content: c,
+          images,
+        }),
+      })
+
+      if (!data || !data.post) {
+        throw new Error(data?.error || '게시글 작성에 실패했습니다.')
+      }
+
+      const newPost = {
+        ...data.post,
+        is_owner: true, // 방금 작성한 글은 내 글
+      }
+
+      // 최신 글을 맨 앞에 추가
+      this.posts = [newPost, ...this.posts]
+
+      // 작성 모달 닫기
+      this.closeCreatePostModal()
+
+      return newPost
+    },
+
+    /**
+     * 게시글 수정
+     * - PostModal.vue: updatePost(postId, title, content)
+     */
+    async updatePost(postId, title, content) {
+      // 기존 게시글 찾기 (목록 → 없으면 activePost)
+      const existing = this.posts.find((p) => p.id === postId) || this.activePost
+
+      const finalTitle = (title !== undefined && title !== null
+        ? String(title)
+        : existing?.title || ''
+      ).trim()
+
+      const finalContent = (content !== undefined && content !== null
+        ? String(content)
+        : existing?.content || ''
+      ).trim()
+
+      if (!finalTitle) {
+        throw new Error('제목을 입력하세요.')
+      }
+
+      const res = await apiFetch(`/users/post/${postId}/update/ajax/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+          title: finalTitle,
+          content: finalContent,
+        }),
+      })
+
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || '게시글 수정에 실패했습니다.')
+      }
+
+      const updated = {
+        id: postId,
+        title: data.post?.title ?? finalTitle,
+        content: data.post?.content ?? finalContent,
+      }
+
+      this._updatePostInList(updated)
+      return updated
+    },
+
+    /**
+     * 게시글 삭제
+     */
+    async deletePost(postId) {
+      const res = await apiFetch(`/users/post/${postId}/delete/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({}),
+      })
+
+      let data = null
+      try {
+        data = await res.json()
+      } catch {
+        // JSON 파싱 실패 시에도 일단 목록에서 제거
+      }
+
+      if (!res.ok || data?.success === false) {
+        throw new Error(data?.error || '게시글 삭제에 실패했습니다.')
+      }
+
+      this._removePostFromList(postId)
+    },
+
+    // =====================================================
+    // 댓글 목록 / 작성 / 수정 / 삭제
+    // =====================================================
     async loadComments(postId) {
       const data = await apiJson(`/users/post/${postId}/comments/ajax/`)
       this.modalComments = data.comments || []
     },
 
+    /**
+     * 댓글 작성
+     * 사용: ps.submitComment(postId, content)
+     */
     async submitComment(postId, content) {
       const c = (content || '').trim()
       if (!c) throw new Error('댓글 내용을 입력하세요.')
@@ -211,14 +393,90 @@ export const useProfileStore = defineStore('profile', {
         try {
           const data = await res.json()
           msg = data?.error || msg
-        } catch {}
+        } catch {
+          // ignore
+        }
         throw new Error(msg)
       }
 
       const data = await res.json()
-      this.modalComments = data.comments || []
+
+      // 백엔드는 { success, comment: {...} } 한 건만 내려줌
+      if (data.comment) {
+        this.modalComments = [...this.modalComments, data.comment]
+      } else if (data.comments) {
+        this.modalComments = data.comments
+      }
     },
 
+    /**
+     * 댓글 수정(내부 구현)
+     * 사용: ps.updateComment(commentId, newContent)
+     */
+    async updateComment(commentId, newContent) {
+      const c = (newContent || '').trim()
+      if (!c) throw new Error('댓글 내용을 입력하세요.')
+
+      const res = await apiFetch(`/users/comment/${commentId}/edit/ajax/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({ content: c }),
+      })
+
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || '댓글 수정에 실패했습니다.')
+      }
+
+      this.modalComments = this.modalComments.map((cm) =>
+        cm.id === commentId
+          ? {
+              ...cm,
+              content: data.content ?? c,
+              updated_at: data.updated_at || cm.updated_at,
+            }
+          : cm,
+      )
+    },
+
+    /**
+     * (PostModal.vue 호환용) 댓글 수정 alias
+     * 사용: ps.editComment(commentId, newContent)
+     */
+    async editComment(commentId, newContent) {
+      return this.updateComment(commentId, newContent)
+    },
+
+    /**
+     * 댓글 삭제
+     * 사용: ps.deleteComment(commentId)
+     */
+    async deleteComment(commentId) {
+      const res = await apiFetch(`/users/comment/${commentId}/delete/ajax/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({}),
+      })
+
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || '댓글 삭제에 실패했습니다.')
+      }
+
+      this.modalComments = this.modalComments.filter((cm) => cm.id !== commentId)
+    },
+
+    // =====================================================
+    // 프로필 이미지 업로드
+    // =====================================================
     async uploadProfileImageBase64(base64Image) {
       const data = await apiJson('/users/upload-profile-image/', {
         method: 'POST',
@@ -230,7 +488,9 @@ export const useProfileStore = defineStore('profile', {
       return data.image_url
     },
 
+    // =====================================================
     // 팔로워/팔로잉 모달
+    // =====================================================
     async openFollowModal(type, targetNickname = null) {
       const nick = targetNickname || this.profile?.nickname
       if (!nick) return
@@ -278,5 +538,27 @@ export const useProfileStore = defineStore('profile', {
       this.followList = []
       this.followListPrivateMessage = ''
     },
+
+
+    resetProfile() {
+      this.profile = {
+        nickname: '',
+        username: '',
+        profile_img: '',
+        follower_count: 0,
+        following_count: 0,
+        is_owner: false,
+        is_following: false,
+      }
+      this.posts = []
+      this.postModalOpen = false
+      this.activePost = null
+      this.modalComments = []
+      // 팔로우 모달은 상황에 따라 유지해도 되지만, 깔끔하게 비우고 싶으면 아래도 포함
+      // this.followModalOpen = false
+      // this.followList = []
+      // this.followListPrivateMessage = ''
+    }
+
   },
 })
