@@ -21,6 +21,12 @@ export const useProfileStore = defineStore('profile', {
       is_following: false,
     },
 
+    myProfile: {
+      nickname: '',
+      username: '',
+      profile_img: '',
+    },
+
     posts: [],
 
     // 모달 상태
@@ -48,6 +54,7 @@ export const useProfileStore = defineStore('profile', {
     nickname: (s) => s.profile?.nickname || '',
     username: (s) => s.profile?.username || '',
     profileImgUrl: (s) => s.profile?.profile_img || '',
+    myProfileImgUrl: (s) => s.myProfile?.profile_img || '',
     followerCount: (s) => s.profile?.follower_count ?? 0,
     followingCount: (s) => s.profile?.following_count ?? 0,
     isOwner: (s) => !!s.profile?.is_owner,
@@ -63,6 +70,14 @@ export const useProfileStore = defineStore('profile', {
       this.profile = payload.profile || this.profile
       this.posts = Array.isArray(payload.posts) ? payload.posts : []
     },
+    
+      _setMyProfilePayload(payload) {
+    if (!payload || !payload.profile) return
+    this.myProfile = {
+      ...(this.myProfile || {}),
+      ...payload.profile,
+    }
+  },
 
     _updatePostInList(updated) {
       if (!updated) return
@@ -90,7 +105,10 @@ export const useProfileStore = defineStore('profile', {
       this.error = null
       try {
         const data = await apiJson('/users/api/profile/me/')
+        // 화면에 “내 프로필 상세 페이지”를 띄울 때 쓰는 profile
         this._setProfilePayload(data)
+        // ✅ 헤더/배너에서 항상 고정으로 사용할 myProfile
+        this._setMyProfilePayload(data)
       } catch (e) {
         this.error = e.message
         throw e
@@ -104,7 +122,9 @@ export const useProfileStore = defineStore('profile', {
       this.error = null
       try {
         const data = await apiJson(`/users/api/profile/${encodeURIComponent(nickname)}/`)
+        // ✅ 여기서는 현재 화면용 profile / posts만 교체
         this._setProfilePayload(data)
+        // this._setMyProfilePayload(...) 는 호출하지 않음
       } catch (e) {
         this.error = e.message
         throw e
@@ -112,6 +132,8 @@ export const useProfileStore = defineStore('profile', {
         this.isLoading = false
       }
     },
+
+
 
     // =====================================================
     // 프로필 검색/자동완성
@@ -558,7 +580,39 @@ export const useProfileStore = defineStore('profile', {
       // this.followModalOpen = false
       // this.followList = []
       // this.followListPrivateMessage = ''
-    }
+    },
+
+    // =====================================================
+    // 프로필 이미지 업로드
+    // =====================================================
+    async uploadProfileImageBase64(base64Image) {
+      const data = await apiJson('/users/upload-profile-image/', {
+        method: 'POST',
+        body: JSON.stringify({ image: base64Image }),
+      })
+      if (!data.success) throw new Error(data.error || '프로필 이미지 업로드 실패')
+
+      this.profile.profile_img = `${data.image_url}?t=${Date.now()}`
+      return data.image_url
+    },
+
+    // ✅ 프로필 이미지 기본값으로 초기화
+    async resetProfileImage() {
+      const data = await apiJson('/users/reset-profile-image/', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+
+      if (!data.success) {
+        throw new Error(data.error || '프로필 이미지를 기본값으로 되돌리는 데 실패했습니다.')
+      }
+
+      // 프론트 상태도 기본 이미지로
+      this.profile.profile_img = ''
+      return true
+    },
+
 
   },
 })
+

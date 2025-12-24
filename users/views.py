@@ -576,6 +576,32 @@ def upload_profile_image(request):
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
+@login_required
+@require_http_methods(["POST"])
+def reset_profile_image(request):
+    """
+    POST /users/reset-profile-image/
+    - 현재 유저의 profile_img를 삭제하고 기본 프로필 상태로 되돌립니다.
+    """
+    try:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        # 기존 프로필 이미지 파일 삭제
+        if profile.profile_img:
+            profile.profile_img.delete(save=False)
+            profile.profile_img = None
+            profile.save(update_fields=["profile_img"])
+
+        return JsonResponse(
+            {
+                "success": True,
+                "image_url": None,
+                "message": "프로필 이미지가 기본 이미지로 설정되었습니다.",
+            }
+        )
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
 # =========================================================
 # Posts
 # =========================================================
@@ -1034,3 +1060,4 @@ def build_user_keywords_api(request):
             "ran_at": timezone.now().isoformat(),
         }
     )
+

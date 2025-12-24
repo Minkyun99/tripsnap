@@ -36,6 +36,7 @@ urlpatterns = [
     path('signup/', views.signup, name='signup'),
     path('delete/', views.account_delete, name='account_delete'),
     path('upload-profile-image/', views.upload_profile_image, name='upload_profile_image'),
+    path('reset-profile-image/', views.reset_profile_image, name='reset_profile_image'), 
 
     # ===== 게시글 =====
     path('post/create/', views.post_create, name='post_create'),

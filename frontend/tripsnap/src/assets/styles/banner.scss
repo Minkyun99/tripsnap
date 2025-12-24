@@ -15,7 +15,7 @@ $ts-accent-pink: #ff69b4;
   z-index: 1000;
   background-color: $ts-header-bg;
   border-bottom: 4px solid $ts-border-brown;
-  padding: 1.1rem 1.25rem;
+  padding: 1.1rem 1.75rem; // ▶ 오른쪽 패딩 약간 늘려 여유
   box-shadow:
     0 8px 20px rgba(0, 0, 0, 0.08),
     0 0 0 1px rgba(255, 255, 255, 0.65);
@@ -45,31 +45,28 @@ $ts-accent-pink: #ff69b4;
 }
 
 .ts-logo__icon {
-  font-size: 2.3rem;
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.18));
+  font-size: 2.2rem;
 }
 
 .ts-logo__text {
   display: flex;
   flex-direction: column;
+  gap: 0.1rem;
 }
 
 .ts-logo__title {
   font-size: 1.7rem;
-  font-weight: 700;
+  font-weight: 800;
+  color: $ts-border-brown;
   margin: 0;
-  color: $ts-text-brown;
-  font-family: inherit;
-  letter-spacing: normal;
-  text-transform: none;
+  letter-spacing: -0.03em;
 }
 
 .ts-logo__subtitle {
-  margin: 0.15rem 0 0;
+  margin: 0;
   color: $ts-text-brown;
   font-weight: 600;
   font-size: 0.86rem;
-  font-family: inherit;
 }
 
 /* ===============================
@@ -78,14 +75,11 @@ $ts-accent-pink: #ff69b4;
 .ts-header__actions {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.7rem;
 }
 
 /* ===============================
-   공통 버튼 (home-btn-profile 느낌)
-   - 기본: 완전 투명
-   - hover: 핑크
-   - 모서리: pixel-corners + 거의 직각
+   공통 버튼 (로그인/회원가입 느낌)
    =============================== */
 @mixin ts-button-base {
   display: inline-flex;
@@ -95,50 +89,57 @@ $ts-accent-pink: #ff69b4;
   padding: 0.7rem 1.8rem;
   font-size: 0.9rem;
   font-weight: 700;
-  font-family: inherit;
-  // border-radius: 0.2rem;  // 둥근 느낌 최소화 (pixel-corners가 실제 모양 담당)
+  border-radius: 0.8rem;
   border: 3px solid $ts-border-brown;
-  background-color: transparent;
+  background-color: #fffefb;
   color: $ts-text-brown;
   cursor: pointer;
   transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    background-color 0.2s ease,
-    color 0.2s ease;
-  box-shadow: 0 8px 0 color.adjust($ts-border-brown, $lightness: -8%);
-  text-decoration: none;
-  white-space: nowrap;
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
+  box-shadow: 0 6px 0 #e5b38f;
+}
+
+.ts-btn {
+  @include ts-button-base;
 
   &:hover {
-    background-color: $ts-accent-pink;
-    color: #ffffff;
-    box-shadow: 0 8px 0 color.adjust($ts-accent-pink, $lightness: -8%);
+    background-color: #ffe8cc;
     transform: translateY(-2px);
+    box-shadow: 0 8px 0 #e0a86f;
   }
 
   &:active {
     transform: translateY(1px);
-    box-shadow: 0 4px 0 color.adjust($ts-accent-pink, $lightness: -12%);
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    box-shadow: none;
-    transform: none;
+    box-shadow: 0 3px 0 #e0a86f;
   }
 }
 
-/* 로그인/회원가입 버튼 */
-.ts-btn {
-  @include ts-button-base;
-}
-
-/* 검색 아이콘 버튼 */
+/* ===============================
+   아이콘 버튼 (챗봇 / 검색)
+   =============================== */
 .ts-icon-btn {
   @include ts-button-base;
-  padding: 0.6rem 1.2rem;
+  padding-inline: 1.3rem;
+  background-color: transparent;
+  box-shadow: none;
+  border-color: $ts-border-brown;
+
+  &:hover {
+    /* ▶ hover 시 핑크톤 */
+    background-color: $ts-accent-pink;
+    color: #ffffff;
+    border-color: color.adjust($ts-accent-pink, $lightness: -10%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 color.adjust($ts-accent-pink, $lightness: -12%);
+  }
+
+  &:active {
+    transform: translateY(1px);
+    box-shadow: 0 3px 0 color.adjust($ts-accent-pink, $lightness: -12%);
+  }
 }
 
 .ts-icon-btn__icon {
@@ -150,11 +151,11 @@ $ts-accent-pink: #ff69b4;
 }
 
 /* ===============================
-   프로필 아바타
+   프로필 아바타 버튼
    =============================== */
 .ts-profile-wrap {
-  /* Teleport로 메뉴를 body로 빼기 때문에,
-     여기서는 아바타 위치만 담당 */
+  /* Teleport로 메뉴는 body에 붙고,
+     여기서는 버튼 위치만 담당 */
 }
 
 .ts-profile-btn {
@@ -165,17 +166,18 @@ $ts-accent-pink: #ff69b4;
   cursor: pointer;
 }
 
-/* 아바타도 투명 + 박스 느낌 */
+/* 동그란 프로필 아바타 (크기 ↑) */
 .ts-profile-avatar {
-  width: 2.5rem;
-  height: 2.5rem;
-  // border-radius: 0.2rem;
-  border: 3px solid $ts-border-brown;
-  background: transparent;
+  width: 3rem;   // ▶ 기존 2.5rem → 3rem
+  height: 3rem;
+  border-radius: 999px;
+  border: 2px solid $ts-border-brown;
+  background: #fffdf8;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 0 color.adjust($ts-border-brown, $lightness: -8%);
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease,
@@ -183,67 +185,74 @@ $ts-accent-pink: #ff69b4;
     color 0.2s ease;
 }
 
+.ts-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .ts-profile-btn:hover .ts-profile-avatar {
-  background-color: $ts-accent-pink;
-  color: #ffffff;
-  box-shadow: 0 8px 0 color.adjust($ts-accent-pink, $lightness: -8%);
-  transform: translateY(-2px);
+  background-color: #ffe8f2;
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
 }
 
 .ts-profile-btn:active .ts-profile-avatar {
-  transform: translateY(1px);
-  box-shadow: 0 4px 0 color.adjust($ts-accent-pink, $lightness: -12%);
+  transform: translateY(0);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.18);
 }
 
 .ts-profile-initial {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: $ts-text-brown;
 }
 
 .ts-profile-emoji {
-  font-size: 1.3rem;
+  font-size: 1.4rem;
 }
 
 /* ===============================
    프로필 드롭다운 (Teleport → body)
    =============================== */
-
-/* 전체 화면 오버레이: 빈 부분 클릭하면 닫기 */
 .ts-profile-menu-layer {
   position: fixed;
   inset: 0;
-  z-index: 9999;   /* 화면 맨 위 레벨 */
-  pointer-events: auto;
+  z-index: 2000;
+  background: transparent; // 바깥 클릭 감지용
 }
 
-/* 실제 메뉴 박스는 오른쪽 상단에 고정 */
+/* ✅ 크기 고정 + 아바타 아래 중앙 정렬 */
 .ts-profile-menu {
   position: fixed;
-  top: 4.2rem;     /* 헤더 높이에 맞춰 적당히 조정 (필요시 수치만 살짝 변경) */
-  right: 1.8rem;
-  min-width: 10.5rem;
+  /* top / left 는 Vue에서 inline style로 주입됨 */
+  transform: translateX(-50%);  // left(=아바타 중앙) 기준으로 가로 중앙 정렬
+  width: 190px;                 // 🔒 고정 너비
+  max-width: 190px;
+  box-sizing: border-box;
+
   background: #fffdf8;
-  // border-radius: 0.2rem;
+  border-radius: 0.9rem;
   border: 3px solid $ts-border-brown;
   box-shadow:
     0 12px 25px rgba(0, 0, 0, 0.16),
     0 0 0 1px rgba(255, 255, 255, 0.85);
-  padding: 0.45rem;
+  padding: 0.4rem;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
 }
 
-/* 드롭다운 메뉴 항목도 같은 버튼 느낌이지만,
-   내부라서 그림자는 조금 줄임 */
 .ts-profile-menu__item {
   @include ts-button-base;
-  padding: 0.45rem 0.7rem;
+  padding: 0.45rem 0.9rem;
   font-size: 0.82rem;
   justify-content: flex-start;
   box-shadow: none;
   background-color: #fffdf8;
+  width: 100%;              // 고정 메뉴 폭 안에서만 확장
+  white-space: nowrap;      // 텍스트 줄바꿈 방지 (크기 변화 최소화)
 
   &:hover {
     background-color: #ffe8f2;
@@ -259,44 +268,43 @@ $ts-accent-pink: #ff69b4;
 
 .ts-profile-menu__item--danger {
   color: #b91c1c;
-  border-color: #b91c1c;
+  border-color: #fecaca;
 
   &:hover {
-    background-color: #fef2f2;
-    color: #b91c1c;
+    background-color: #fee2e2;
   }
 }
 
+
 /* ===============================
-   반응형
+   반응형 조정
    =============================== */
 @media (max-width: 768px) {
   .ts-header {
-    padding: 0.9rem 1rem;
+    padding-inline: 1.1rem;
   }
 
-  .ts-logo__title {
-    font-size: 1.4rem;
+  .ts-header__inner {
+    gap: 1rem;
   }
 
   .ts-logo__subtitle {
-    font-size: 0.75rem;
-  }
-
-  .ts-icon-btn__label {
-    display: none;  /* 모바일에서는 돋보기 아이콘만 */
-  }
-
-  .ts-icon-btn {
-    padding-inline: 0.9rem;
-  }
-
-  .ts-header__actions {
-    gap: 0.4rem;
+    display: none;
   }
 
   .ts-btn {
-    padding-inline: 1.4rem;
+    padding-inline: 1.2rem;
+  }
+}
+
+/* ▶ 화면이 줄어들면 챗봇/검색은 이모지만 남게 */
+@media (max-width: 640px) {
+  .ts-icon-btn__label {
+    display: none;
+  }
+
+  .ts-icon-btn {
+    padding: 0.7rem 0.9rem; // 아이콘 중심의 정사각형 느낌
   }
 }
 
@@ -306,6 +314,6 @@ $ts-accent-pink: #ff69b4;
   }
 
   .ts-logo__text {
-    display: none; /* 아주 좁은 화면에서는 🍞 아이콘만 */
+    display: none; // 아주 좁은 화면에서는 아이콘만
   }
 }
