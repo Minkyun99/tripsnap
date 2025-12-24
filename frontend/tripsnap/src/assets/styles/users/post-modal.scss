@@ -1,0 +1,306 @@
+// src/assets/post-modal.scss
+@use '@/assets/styles/users/profile.scss' as *;
+
+/* ===================================
+   모달 크기 / 그리드 정렬
+   =================================== */
+
+.ts-modal {
+  max-width: 1000px;   /* 모달 살짝 크게 */
+  width: 92vw;
+  // min-height: 520px;
+  padding: 10px;
+}
+
+/* 좌우 2열 레이아웃 */
+.ts-modal-grid {
+  align-items: stretch;  /* 좌우 컬럼 모두 그리드 높이 채움 */
+  column-gap: 1.5rem;
+  height: 100%;          /* ✅ 모달 내부 높이를 100% 채움 */
+}
+
+/* ===================================
+   좌측 이미지 컬럼
+   - 모달 세로 크기에 맞춰 100% 채우기
+   - 이미지 가로/세로 정중앙 + 비율 유지하면서 꽉 차게 (cover)
+   =================================== */
+
+.ts-modal-media {
+  width: 100%;
+  height: 100%;          /* ✅ 모달 그리드 높이와 동일 */
+  min-height: 100%;
+  background: #000;      /* 위·아래/좌·우 검정 배경 */
+  border-radius: 1rem;
+  overflow: hidden;
+  display: flex;
+  align-items: center;   /* 내부 컨텐츠(슬라이더)를 세로 중앙 */
+  justify-content: center; /* 가로 중앙 */
+}
+
+/* 슬라이더 컨테이너: 박스 전체를 채움 */
+.ts-slider-container {
+  position: relative;
+  overflow: hidden;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;          /* 부모(.ts-modal-media)를 꽉 채움 */
+}
+
+.ts-slider-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* 각 슬라이드가 박스를 모두 채우고, 그 안에서 이미지 가운데 정렬 */
+.ts-slide {
+  min-width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;      /* 이미지 세로 가운데 */
+  justify-content: center;  /* 이미지 가로 가운데 */
+  background: #000;
+}
+
+/* ✅ 이미지를 비율 유지하면서 박스를 꽉 채우도록 (일부 잘릴 수 있음) */
+.ts-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ts-placeholder {
+  font-size: 2.5rem;
+  color: #f9fafb;
+}
+
+/* 슬라이더 네비게이션 버튼 */
+.ts-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.35);
+  color: white;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  &.prev {
+    left: 10px;
+  }
+  &.next {
+    right: 10px;
+  }
+}
+
+.ts-page-indicator {
+  position: absolute;
+  text-align: center;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+/* ===================================
+   본문 + 자세히 보기 박스
+   =================================== */
+
+.ts-content-box {
+  margin-top: 0.4rem;
+  margin-bottom: 0.7rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.9rem;
+  background: #fffdf7;
+  border: 1px solid rgba(210, 105, 30, 0.45);
+  /* 박스 자체가 어느 정도 기본 크기를 가지도록 */
+  min-height: 7rem;
+}
+
+/* 기본: 몇 줄만 보이고, 박스 최소 높이는 유지 */
+.ts-modal-content {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  margin: 0 0 0.35rem;
+  max-height: 8rem;       /* 내용에 따라 이 선까지 커짐 */
+  overflow: hidden;
+}
+
+/* 자세히 보기: 더 키우고, 내부 스크롤 */
+.ts-modal-content--expanded {
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+/* 본문 스크롤바 커스터마이징 (선택) */
+.ts-modal-content--expanded::-webkit-scrollbar {
+  width: 6px;
+}
+.ts-modal-content--expanded::-webkit-scrollbar-thumb {
+  background: #d2691e;
+  border-radius: 3px;
+}
+.ts-modal-content--expanded::-webkit-scrollbar-track {
+  background: #fef6ec;
+}
+
+.ts-content-toggle {
+  border: 1px solid rgba(210, 105, 30, 0.8);
+  background: #fffaf0;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #8b4513;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &:hover {
+    background: #ffe8cc;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+  }
+}
+
+/* ===================================
+   본문 아래 액션 행 (좋아요 + 수정/삭제)
+   =================================== */
+
+.ts-post-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+/* 좋아요 버튼은 기존 profile.scss 스타일을 따라가되 간격만 조정 */
+.ts-modal-like {
+  margin-top: 0;
+}
+
+/* 우측 수정·삭제 묶음 */
+.ts-post-owner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* 수정/삭제 공통 버튼 디자인 */
+.ts-post-action-btn {
+  border-radius: 999px;
+  padding: 0.28rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  background: #f9fafb;
+  color: #6b7280;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &:hover {
+    background: #e5e7eb;
+    color: #374151;
+    border-color: #9ca3af;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+}
+
+/* 삭제 전용 */
+.ts-post-action-btn--danger {
+  border-color: rgba(239, 68, 68, 0.9);
+  background: #fef2f2;
+  color: #b91c1c;
+
+  &:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #7f1d1d;
+  }
+}
+
+/* 수정 모드 취소/저장 버튼 정렬 */
+.ts-post-edit-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+/* ===================================
+   댓글 영역
+   =================================== */
+
+.ts-comments-box {
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #d2691e;
+  border-radius: 2px;
+}
+
+/* ===================================
+   반응형
+   =================================== */
+
+@media (max-width: 768px) {
+  .ts-modal {
+    width: 96vw;
+    max-width: 96vw;
+  }
+
+  .ts-modal-media {
+    min-height: 260px;
+  }
+
+  .ts-post-actions-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  .ts-post-owner-actions {
+    align-self: flex-end;
+  }
+}

@@ -338,37 +338,44 @@ $ts-pink-hover: #ff1493;
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  padding: 1rem;
+  padding: 1.5rem;
   display: grid;
   place-items: center;
-  z-index: 1000; /* 더 높은 z-index */
+  z-index: 1000;
 }
 
 .ts-create-modal {
   width: 100%;
-  max-width: 34rem;
+  max-width: 48rem;          /* ✅ 기존 34rem → 48rem로 확장 */
+  max-height: 90vh;          /* ✅ 화면 90%까지만 사용하고 내부 스크롤 */
   background: #fff;
-  border: 4px solid $ts-border-brown;
-  padding: 1.25rem;
-  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.22);
+  border: 3px solid $ts-border-brown;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.2);
   position: relative;
-  z-index: 1001; /* 오버레이보다 높게 */
+  z-index: 1001;
+  overflow-y: auto;          /* ✅ 내용이 많으면 모달 내부 스크롤 */
 }
 
 .ts-title {
   margin: 0 0 1rem;
-  font-size: 1.35rem;
+  font-size: 1.5rem;         /* 약간 키움 */
   font-weight: 900;
   color: $ts-border-brown;
 }
 
-.ts-input, .ts-textarea {
+.ts-input,
+.ts-textarea {
   width: 100%;
-  padding: 0.7rem 0.85rem;
+  padding: 0.75rem 0.9rem;
   border-radius: 0.7rem;
   border: 1px solid rgba(0, 0, 0, 0.18);
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.9rem;
   font-family: inherit;
+}
+
+.ts-textarea {
+  min-height: 140px;         /* ✅ rows 대신 최소 높이 확보 */
 }
 
 .ts-label {
@@ -378,45 +385,70 @@ $ts-pink-hover: #ff1493;
   color: #6b4f2a;
 }
 
-/* 이미지 그리드 레이아웃 */
-.ts-image-section {
-  margin-bottom: 1.25rem;
+/* 이미지 / 지도 섹션 여백 */
+.ts-image-section,
+.ts-map-section {
+  margin-bottom: 1.4rem;
 }
 
 /* ✨ 카카오 지도 스타일 */
-.ts-map-section {
-  margin-bottom: 1.25rem;
-}
-
 .ts-map-container {
   width: 100%;
-  height: 300px;
+  height: 340px;             /* 기존 300px → 조금 넉넉하게 */
   border: 2px solid $ts-border-brown;
   border-radius: 8px;
   overflow: hidden;
   position: relative;
-  z-index: 1; /* 지도를 낮은 z-index로 */
+  z-index: 1;
 }
 
+/* 이미지 그리드 레이아웃 조금 키움 */
 .ts-preview-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 100px);
+  grid-template-columns: repeat(auto-fill, 110px);
   gap: 12px;
 }
 
 .ts-preview-box {
-  width: 100px;
-  height: 100px;
+  width: 110px;
+  height: 110px;
   position: relative;
   border: 2px solid $ts-border-brown;
   border-radius: 8px;
   overflow: hidden;
+  background: #eee;
 
   img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
+}
+
+.ts-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+  transition: opacity 0.2s;
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+.ts-main-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(210, 105, 30, 0.85);
+  color: white;
+  font-size: 11px;
+  text-align: center;
+  padding: 2px 0;
+  font-weight: bold;
+  pointer-events: none;
 }
 
 .ts-remove-btn {
@@ -435,15 +467,15 @@ $ts-pink-hover: #ff1493;
   justify-content: center;
   font-size: 14px;
   font-weight: bold;
-  
+
   &:hover {
     background: #b22222;
   }
 }
 
 .ts-add-box {
-  width: 100px;
-  height: 100px;
+  width: 110px;
+  height: 110px;
   border: 2px dashed $ts-border-brown;
   border-radius: 8px;
   background: #fffaf0;
@@ -469,7 +501,8 @@ $ts-pink-hover: #ff1493;
   gap: 0.75rem;
   justify-content: flex-end;
   position: relative;
-  z-index: 10; /* 버튼을 높은 z-index로 */
+  z-index: 10;
+  margin-top: 0.75rem;
 }
 
 .ts-btn {
@@ -484,14 +517,24 @@ $ts-pink-hover: #ff1493;
 .ts-btn--pink {
   background: $ts-pink;
   color: #fff;
-  &:hover { background: $ts-pink-hover; }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  &:hover {
+    background: $ts-pink-hover;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .ts-btn--white {
   background: #fff;
   color: #6b4f2a;
-  &:hover { background: #f8f8f8; }
+
+  &:hover {
+    background: #f8f8f8;
+  }
 }
 
 .ts-error {
@@ -501,39 +544,15 @@ $ts-pink-hover: #ff1493;
   font-size: 0.9rem;
 }
 
-.ts-preview-box {
-  width: 100px;
-  height: 100px;
-  position: relative;
-  border: 2px solid #d2691e;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #eee;
-}
-
-.ts-preview-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  cursor: pointer; // 클릭 가능하다는 시각적 힌트
-  transition: opacity 0.2s;
-
-  &:hover {
-    opacity: 0.9;
+/* 반응형 - 모바일에서는 너무 넓지 않게 */
+@media (max-width: 640px) {
+  .ts-create-modal {
+    max-width: 100%;
+    padding: 1.25rem;
   }
-}
 
-.ts-main-badge {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(210, 105, 30, 0.85); 
-  color: white;
-  font-size: 11px;
-  text-align: center;
-  padding: 2px 0;
-  font-weight: bold;
-  pointer-events: none; // 배지 클릭 시에도 이미지가 클릭되도록 설정
+  .ts-map-container {
+    height: 260px;
+  }
 }
 </style>

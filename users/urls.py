@@ -13,7 +13,7 @@ urlpatterns = [
     
     # ===== 프로필 =====
     path('profile/', views.user_profile, name='user_profile'),
-    path("api/profile/search/", views.profile_search, name="profile-search"),  # ✅ search는 <nickname>보다 위!
+    path("api/profile/search/", views.profile_search, name="profile-search"), 
     path('profile/<str:nickname>/', views.user_profile, name='profile_detail'),
 
     # ===== 팔로우 =====
