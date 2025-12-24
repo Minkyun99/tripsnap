@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 
@@ -16,28 +16,61 @@ const userStore = useUserStore()
 
 const { posts } = storeToRefs(ps)
 
+// 현재 URL의 nickname 파라미터
 const nicknameParam = computed(() => String(route.params.nickname || ''))
 
 // ✅ 내가 보고 있는 프로필이 “내 것인지”
 const isOwner = computed(() => {
-  return (
-    userStore.isAuthenticated && userStore.nickname && userStore.nickname === nicknameParam.value
-  )
+  const me = userStore.user
+  const myNickname = me?.nickname || ''
+  return !!me && !!nicknameParam.value && myNickname === nicknameParam.value
 })
+
+// ---------------------------
+// 프로필/게시글 로딩 함수
+// ---------------------------
+async function fetchProfile() {
+  const nick = nicknameParam.value
+  if (!nick) return
+
+  // 내 정보 동기화 (로그인 안돼 있거나 expired된 경우 대비)
+  await userStore.fetchMe().catch(() => {})
+
+  // 닉네임 기준 프로필+게시글 로드
+  await ps.loadProfileByNickname(nick)
+}
 
 // ---------------------------
 // 초기 로드
 // ---------------------------
 onMounted(async () => {
-  await userStore.fetchMe().catch(() => {})
-  await ps.loadProfileByNickname(nicknameParam.value)
+  await fetchProfile()
 })
+
+// ---------------------------
+// 닉네임이 바뀔 때마다 새로 로딩
+//  - 팔로우/팔로잉 목록에서 다른 유저 클릭
+//  - 다른 사람 팔로우 목록에서 내 아이디 클릭 등
+// ---------------------------
+watch(
+  () => route.params.nickname,
+  async (newNick, oldNick) => {
+    if (!newNick || newNick === oldNick) return
+
+    // 프로필 주인이 바뀌는 상황이므로 모달들 정리
+    ps.closePostModal()
+    ps.closeFollowModal()
+
+    await fetchProfile()
+  }
+)
 
 // ---------------------------
 // 페이지 이동 시 모달 정리
 // ---------------------------
 onBeforeUnmount(() => {
   ps.closeFollowModal()
+  ps.closePostModal()
 })
 
 // ---------------------------
@@ -65,7 +98,17 @@ function openPostModal(post) {
 // ---------------------------
 function goProfileFromFollow(nickname) {
   ps.closeFollowModal()
-  router.push({ name: 'profile-detail', params: { nickname } }).catch(() => {})
+
+  const me = userStore.user
+  const myNickname = me?.nickname || ''
+
+  // ✅ 클릭한 닉네임이 "나"라면 → 내 전용 프로필 페이지(/profile)로 이동
+  if (myNickname && nickname === myNickname) {
+    router.push({ name: 'profile' }).catch(() => {})
+  } else {
+    // 그 외에는 기존대로 디테일 페이지(/profile/:nickname)
+    router.push({ name: 'profile-detail', params: { nickname } }).catch(() => {})
+  }
 }
 </script>
 
@@ -208,5 +251,5 @@ function goProfileFromFollow(nickname) {
 </template>
 
 <style scoped lang="scss">
-@use '@/assets/profile.scss' as *;
+@use '@/assets/styles/users/profile.scss';
 </style>

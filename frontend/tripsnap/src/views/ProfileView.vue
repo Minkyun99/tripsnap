@@ -185,5 +185,5 @@ function goProfileFromFollow(nickname) {
 </template>
 
 <style scoped lang="scss">
-@use '@/assets/profile.scss' as *;
+@use '@/assets/styles/users/profile.scss';
 </style>

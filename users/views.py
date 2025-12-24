@@ -15,6 +15,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST, require_http_methods
+from django.db.models import Q
 
 from allauth.socialaccount.models import SocialAccount
 
@@ -824,6 +825,7 @@ def account_delete_api(request):
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
     
+
 @login_required
 def recommended_bakeries_api(request):
     """
@@ -943,3 +945,4 @@ def recommended_bakeries_api(request):
         )
 
     return JsonResponse({"results": results})
+

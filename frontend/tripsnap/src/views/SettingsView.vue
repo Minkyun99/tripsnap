@@ -135,11 +135,25 @@ async function deleteAccount() {
     delLoading.value = false
   }
 }
+
+
+function goBackToMyProfile() {
+  router.push({ name: 'profile' }).catch(() => {})
+}
 </script>
 
 <template>
   <main class="ts-settings-page">
+    
     <div class="ts-shell">
+      <!-- ✅ 뒤로가기 버튼 -->
+    <button
+      class="ts-back-btn"
+      type="button"
+      @click="goBackToMyProfile"
+    >
+      👈 내 프로필로
+    </button>
       <section class="ts-card pixel-corners">
         <header class="ts-settings-header">
           <h2 class="ts-title">설정</h2>
@@ -369,33 +383,66 @@ async function deleteAccount() {
   box-shadow: 0 0 0 1px rgba(210, 105, 30, 0.2);
 }
 .ts-btn {
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
   font-weight: 800;
-  border: 2px solid #d2691e;
+  border: 1px solid #e2b892;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
 }
+/* 저장 / 일반 버튼 */
 .ts-btn--pink {
-  background: #d2691e;
+  background: #e89c5d;
   color: #fff;
+  border-color: #dfa372;
 }
 .ts-btn--pink:hover {
-  background: #8b4513;
-  border-color: #8b4513;
+  background: #cd7b38;
+  border-color: #c07233;
 }
+/* 🔥 회원탈퇴 버튼 */
 .ts-btn--danger {
-  background: #b00020;
-  border-color: #b00020;
+  background: #c34646;
+  border-color: #c34646;
   color: #fff;
 }
 .ts-btn--danger:hover {
-  filter: brightness(0.95);
+  background: #a83232;
+  border-color: #a83232;
 }
+/* 비활성화 */
 .ts-btn:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: default;
 }
 .ts-danger {
   color: #b00020;
+}
+/* ✅ 통일감 있는 뒤로가기 버튼 스타일 */
+.ts-back-btn {
+  margin-bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #f0d3a0;
+  background: #fff7ea;
+  color: #8b4513;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+}
+.ts-back-btn:hover {
+  background: #ffe7c2;
+  border-color: #f0b878;
+  transform: translateY(-1px);
+}
+.ts-back-icon {
+  font-size: 14px;
+}
+.ts-back-label {
+  line-height: 1;
 }
 </style>
