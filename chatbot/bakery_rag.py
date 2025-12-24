@@ -72,19 +72,19 @@ class BakeryRAGSystem:
         Returns:
             임베딩용 텍스트
         """
-        # 필드명 매핑 (실제 JSON 구조에 맞춤)
-        place_name = bakery.get('식당명', bakery.get('place_name', '알 수 없음'))
+        # 새 JSON 구조에 맞춘 필드명
+        place_name = bakery.get('name', '알 수 없음')
         keywords = bakery.get('keywords', [])
-        category = bakery.get('카테고리', bakery.get('category', '베이커리'))
+        category = bakery.get('category', '베이커리')
         
         # 주소 정보 (도로명 우선, 없으면 지번)
-        address = bakery.get('도로명 주소', bakery.get('지번 주소', bakery.get('address', '주소 정보 없음')))
+        address = bakery.get('road_address', bakery.get('jibun_address', '주소 정보 없음'))
         
         # 구 정보
-        district = bakery.get('검색_구', '')
+        district = bakery.get('district', '')
         
         # 연락처
-        phone = bakery.get('연락처', bakery.get('phone', ''))
+        phone = bakery.get('phone', '')
         
         # 평점 정보 (rating이 dict인 경우)
         rating_info = bakery.get('rating', {})
@@ -98,6 +98,15 @@ class BakeryRAGSystem:
         # 리뷰 키워드 정보
         review_keywords = bakery.get('review_keywords', [])
         review_kw_text = ", ".join([kw['keyword'].strip('"') for kw in review_keywords[:5]])
+        
+        # 대기 시간 정보 (waiting_prediction)
+        waiting_info = bakery.get('waiting_prediction', {})
+        wait_text = ""
+        if waiting_info:
+            overall_stats = waiting_info.get('overall_stats', {})
+            avg_wait = overall_stats.get('average_minutes', 0)
+            if avg_wait > 0:
+                wait_text = f"평균 대기 시간: {avg_wait}분"
         
         # 임베딩용 텍스트 생성 (키워드와 특징 중심)
         text_parts = [
@@ -113,6 +122,9 @@ class BakeryRAGSystem:
         
         if review_kw_text:
             text_parts.append(f"고객 평가: {review_kw_text}")
+        
+        if wait_text:
+            text_parts.append(wait_text)
         
         text_parts.extend([
             f"주소: {address}",
@@ -131,13 +143,13 @@ class BakeryRAGSystem:
         Returns:
             메타데이터 딕셔너리
         """
-        # 필드명 매핑
-        place_name = bakery.get('식당명', bakery.get('place_name', '알 수 없음'))
-        address = bakery.get('도로명 주소', bakery.get('지번 주소', bakery.get('address', '주소 정보 없음')))
-        phone = bakery.get('연락처', bakery.get('phone', '전화번호 없음'))
-        category = bakery.get('카테고리', bakery.get('category', '베이커리'))
-        district = bakery.get('검색_구', '')
-        url = bakery.get('url', bakery.get('naver_map_url', ''))
+        # 새 JSON 구조에 맞춘 필드명
+        place_name = bakery.get('name', '알 수 없음')
+        address = bakery.get('road_address', bakery.get('jibun_address', '주소 정보 없음'))
+        phone = bakery.get('phone', '전화번호 없음')
+        category = bakery.get('category', '베이커리')
+        district = bakery.get('district', '')
+        url = bakery.get('url', '')
         
         # 평점 정보
         rating_info = bakery.get('rating', {})
@@ -156,6 +168,20 @@ class BakeryRAGSystem:
         review_keywords = bakery.get('review_keywords', [])
         review_kw_str = ', '.join([kw['keyword'].strip('"') for kw in review_keywords[:3]])
         
+        # 영업시간 정보 (business_hours_raw에서 추출)
+        business_hours = bakery.get('business_hours_raw', '영업시간 정보 없음')
+        
+        # 대기 시간 정보
+        waiting_info = bakery.get('waiting_prediction', {})
+        avg_wait = "정보 없음"
+        if waiting_info:
+            overall_stats = waiting_info.get('overall_stats', {})
+            avg_minutes = overall_stats.get('average_minutes', 0)
+            if avg_minutes > 0:
+                avg_wait = f"{avg_minutes}분"
+            else:
+                avg_wait = "대기 없음"
+        
         return {
             'place_name': place_name,
             'address': address,
@@ -165,7 +191,9 @@ class BakeryRAGSystem:
             'review_keywords': review_kw_str,
             'category': category,
             'district': district,
-            'url': url
+            'url': url,
+            'business_hours': business_hours,
+            'avg_waiting_time': avg_wait
         }
     
     def load_and_index_bakeries(self, data_file: str = DATA_FILE, force_reindex: bool = False):
@@ -326,20 +354,24 @@ class BakeryRAGSystem:
             include=['documents', 'metadatas', 'distances']
         )
         
-        # 4. 결과 포맷팅
+        # 4. 결과 포맷팅 (새 필드 추가)
         formatted_results = []
         if results['ids'] and len(results['ids'][0]) > 0:
             for i in range(len(results['ids'][0])):
                 similarity = 1 - results['distances'][0][i]  # 거리를 유사도로 변환
                 
+                metadata = results['metadatas'][0][i]
                 result = {
-                    'place_name': results['metadatas'][0][i]['place_name'],
-                    'address': results['metadatas'][0][i]['address'],
-                    'phone': results['metadatas'][0][i]['phone'],
-                    'rating': results['metadatas'][0][i]['rating'],
-                    # 'review_count': results['metadatas'][0][i]['review_count'],
-                    'keywords': results['metadatas'][0][i]['keywords'],
-                    'naver_map_url': results['metadatas'][0][i].get('naver_map_url', ''),
+                    'place_name': metadata['place_name'],
+                    'address': metadata['address'],
+                    'phone': metadata['phone'],
+                    'rating': metadata['rating'],
+                    'keywords': metadata['keywords'],
+                    'review_keywords': metadata.get('review_keywords', ''),
+                    'district': metadata.get('district', ''),
+                    'url': metadata.get('url', ''),
+                    'business_hours': metadata.get('business_hours', '영업시간 정보 없음'),
+                    'avg_waiting_time': metadata.get('avg_waiting_time', '정보 없음'),
                     'similarity_score': round(similarity, 3),
                     'document': results['documents'][0][i]
                 }
@@ -383,6 +415,10 @@ class BakeryRAGSystem:
             if result['phone'] and result['phone'] != '전화번호 없음':
                 print(f"   📞 전화: {result['phone']}")
             
+            # 대기 시간 정보 표시
+            if result.get('avg_waiting_time') and result['avg_waiting_time'] != '정보 없음':
+                print(f"   ⏰ 평균 대기: {result['avg_waiting_time']}")
+            
             print(f"   🎯 유사도: {result['similarity_score']}")
             
             if result.get('url'):
@@ -412,7 +448,8 @@ class BakeryRAGSystem:
             f"특징: {result['keywords']}\n"
             f"평점: {result['rating']}\n"
             f"위치: {result.get('district', '')} {result['address']}\n"
-            f"전화: {result['phone']}"
+            f"전화: {result['phone']}\n"
+            f"평균 대기: {result.get('avg_waiting_time', '정보 없음')}"
             for i, result in enumerate(search_results[:3])  # 상위 3개만 사용
         ])
         
@@ -470,6 +507,8 @@ class BakeryRAGSystem:
             if result.get('district'):
                 response += f"   - 위치: 대전 {result['district']}\n"
             response += f"   - 주소: {result['address']}\n"
+            if result.get('avg_waiting_time') and result['avg_waiting_time'] != '정보 없음':
+                response += f"   - 평균 대기: {result['avg_waiting_time']}\n"
             if i < len(search_results[:3]):
                 response += "\n"
         

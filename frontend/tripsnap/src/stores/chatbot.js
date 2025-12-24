@@ -6,7 +6,7 @@ export const useChatStore = defineStore('chatbot', {
     // 백엔드 Conversation.id
     conversationId: null,
     // 채팅 메시지 목록
-    // 각 메시지: { id: number, role: 'user' | 'bot', text: string }
+    // 각 메시지: { id: number, role: 'user' | 'bot', text: string, results?: array }
     messages: [],
   }),
 
@@ -31,14 +31,22 @@ export const useChatStore = defineStore('chatbot', {
      * 메시지 하나 추가
      * @param {'user'|'bot'} role
      * @param {string} text
+     * @param {Array} results - 빵집 검색 결과 (선택적)
      */
-    appendMessage(role, text) {
+    appendMessage(role, text, results = null) {
       const nextId = (this.messages[this.messages.length - 1]?.id || 0) + 1
-      this.messages.push({
+      const msg = {
         id: nextId,
         role,
         text,
-      })
+      }
+      
+      // results가 있으면 추가
+      if (results) {
+        msg.results = results
+      }
+      
+      this.messages.push(msg)
     },
 
     /**

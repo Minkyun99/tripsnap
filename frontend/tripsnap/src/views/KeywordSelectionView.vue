@@ -4,9 +4,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/users'
 import { useChatStore } from '../stores/chatbot'
-import { getCsrfToken } from '../utils/csrf'
-
-const API_BASE = import.meta.env.VITE_API_BASE
+import { apiJson } from '../utils/api'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -23,22 +21,22 @@ const displayName = computed(() => {
  * 1) 선호 키워드: 여러 개 선택, 최대 3개
  */
 const preferenceOptions = [
-  { value: '줄 서도 먹는 빵집', label: '줄 서도 먹는 빵집', emoji: '⏳' },
-  { value: '동네 소문난 빵집', label: '동네 소문난 빵집', emoji: '🏘️' },
-  { value: '디저트 카페', label: '디저트 카페', emoji: '🍰' },
-  { value: '바게트·하드 계열', label: '바게트 · 하드 계열', emoji: '🥖' },
-  { value: '크루아상 맛집', label: '크루아상 맛집', emoji: '🥐' },
-  { value: '에그타르트 맛집', label: '에그타르트 맛집', emoji: '🥧' },
+  { value: '소금빵', label: '소금빵', emoji: '🥐' },
+  { value: '바삭한', label: '바삭한', emoji: '✨' },
+  { value: '마들렌', label: '마들렌', emoji: '🍰' },
+  { value: '건강빵', label: '건강빵', emoji: '🥖' },
+  { value: '겉바속촉', label: '겉바속촉', emoji: '🔥' },
+  { value: '에그타르트', label: '에그타르트', emoji: '🥧' },
 ]
 
 // 기본으로 1개는 선택해 둠
-const selectedPreferences = ref(['줄 서도 먹는 빵집'])
+const selectedPreferences = ref([''])
 
 /**
  * 2) 지역: 대전 내 구만 선택
  */
-const regionOptions = ['동구', '중구', '서구', '유성구', '대덕구']
-const region = ref('서구') // 기본값은 서구로 설정 (원하시는 구로 변경 가능)
+const regionOptions = ['동구', '중구', '서구', '유성구', '대덕구', '대전 전체']
+const region = ref('') // 기본값은 서구로 설정 (원하시는 구로 변경 가능)
 
 /**
  * 3) 날짜: from - to (달력)
@@ -50,7 +48,7 @@ const endDate = ref('')
  * 4) 이동 수단
  */
 const transportOptions = ['대중교통', '자차', '도보 위주', '상관없음']
-const transport = ref('대중교통')
+const transport = ref('')
 
 const isLoading = ref(false)
 const errorMessage = ref('')
@@ -98,12 +96,6 @@ const startChat = async () => {
     return
   }
 
-  const csrftoken = getCsrfToken()
-  if (!csrftoken) {
-    errorMessage.value = 'CSRF 토큰을 찾을 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
-    return
-  }
-
   isLoading.value = true
 
   try {
@@ -112,13 +104,8 @@ const startChat = async () => {
     // dates: "YYYY-MM-DD ~ YYYY-MM-DD" 형태로 전송
     const datesString = `${startDate.value} ~ ${endDate.value}`
 
-    const res = await fetch(`${API_BASE}/chatbot/init/`, {
+    const data = await apiJson('/chatbot/init/', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrftoken,
-      },
-      credentials: 'include',
       body: JSON.stringify({
         preference: preferenceString,
         region: region.value,
@@ -126,19 +113,6 @@ const startChat = async () => {
         transport: transport.value,
       }),
     })
-
-    if (!res.ok) {
-      let detail = '챗봇 초기화 중 오류가 발생했습니다.'
-      try {
-        const data = await res.json()
-        if (data.detail) detail = data.detail
-      } catch {
-        // HTML 응답일 경우 json 파싱 실패 → 기본 메시지 유지
-      }
-      throw new Error(detail)
-    }
-
-    const data = await res.json()
 
     // Pinia store에 초기 대화 상태 세팅
     chatStore.reset()

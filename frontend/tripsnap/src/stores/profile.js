@@ -1,9 +1,6 @@
 // src/stores/profile.js
 import { defineStore } from 'pinia'
 import { apiFetch, apiJson } from '@/utils/api'
-import { getCsrfToken } from '@/utils/csrf'
-
-const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 export const useProfileStore = defineStore('profile', {
   state: () => ({
@@ -212,23 +209,10 @@ export const useProfileStore = defineStore('profile', {
     },
 
     async deletePost(postId) {
-      const res = await fetch(`${API_BASE}/users/post/${postId}/delete/`, {
+      const data = await apiJson(`/users/post/${postId}/delete/`, {
         method: 'POST',
-        credentials: 'include',
-        redirect: 'manual',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrfToken(),
-          'X-Requested-With': 'XMLHttpRequest',
-        },
         body: JSON.stringify({}),
       })
-
-      if (!res.ok) {
-        throw new Error('게시글 삭제에 실패했습니다.')
-      }
-
-      const data = await res.json()
 
       // ✅ 즉시 프론트 상태 반영
       this.posts = this.posts.filter((p) => p.id !== postId)
@@ -237,38 +221,22 @@ export const useProfileStore = defineStore('profile', {
       return data
     },
 
-async createPost({ title, content, images }) { // image_base64 대신 images (배열) 받기
-  const res = await fetch(`${API_BASE}/users/post/create/`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': getCsrfToken(),
-      'X-Requested-With': 'XMLHttpRequest',
+    async createPost({ title, content, images }) {
+      const data = await apiJson('/users/post/create/', {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          content,
+          images, // ✅ Base64 문자열들의 배열
+        }),
+      })
+
+      // 즉시 반영 (백엔드 응답 구조에 따라 data.post 확인)
+      if (data.post) {
+        this.posts.unshift(data.post)
+      }
+      return data
     },
-    body: JSON.stringify({
-      title,
-      content,
-      images, // ✅ Base64 문자열들의 배열
-    }),
-  })
-
-  if (!res.ok) {
-    let msg = '게시글 작성 실패'
-    try {
-      const data = await res.json()
-      msg = data?.error || msg
-    } catch {}
-    throw new Error(msg)
-  }
-
-  const data = await res.json()
-  // 즉시 반영 (백엔드 응답 구조에 따라 data.post 확인)
-  if (data.post) {
-    this.posts.unshift(data.post)
-  }
-  return data
-},
 
     async uploadProfileImageBase64(base64Image) {
       const data = await apiJson('/users/upload-profile-image/', {
