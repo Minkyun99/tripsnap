@@ -1,21 +1,43 @@
 <!-- src/views/ProfileSearchView.vue -->
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
+
 import { useProfileStore } from '../stores/profile'
 import { useBakeryStore } from '@/stores/bakery'
+import { useUserStore } from '@/stores/users'
 import BakeryModal from './BakeryModal.vue'
 
 const router = useRouter()
 const ps = useProfileStore()
 const bakeryStore = useBakeryStore()
+const userStore = useUserStore()
 
+// 통합 검색 결과 (profile.js 안에 있다고 가정)
 const { searchUserResults, searchBakeryResults } = storeToRefs(ps)
 
 const q = ref('')
 const error = ref('')
 const isLoading = ref(false)
+
+// 현재 로그인한 내 닉네임
+const myNickname = computed(() => {
+  const fromUser = userStore.user?.nickname || userStore.user?.username || ''
+  const fromProfile = ps.myProfile?.nickname || ps.profile?.nickname || ''
+  return fromUser || fromProfile || ''
+})
+
+// 필요하면 내 프로필 정보를 한 번 로드해서 myNickname 보정
+onMounted(async () => {
+  try {
+    if (!myNickname.value) {
+      await ps.loadMyProfile().catch(() => {})
+    }
+  } catch {
+    // 비로그인 등은 조용히 무시
+  }
+})
 
 /**
  * 프로필 + 빵집 통합 검색
@@ -25,21 +47,32 @@ async function onSubmit() {
   isLoading.value = true
 
   try {
-    // 통합 검색 (유저 + 베이커리)
+    if (!q.value.trim()) {
+      error.value = '검색어를 입력해주세요.'
+      return
+    }
+    // 유저 + 베이커리 통합 검색 API (profile.js에서 구현)
     await ps.searchUsersAndBakeries(q.value)
   } catch (e) {
-    error.value = e.message || '검색 중 오류가 발생했습니다.'
+    error.value = e?.message || '검색 중 오류가 발생했습니다.'
   } finally {
     isLoading.value = false
   }
 }
 
 /**
- * 유저 카드 클릭 → 프로필 페이지로 이동
+ * 유저 카드 클릭 → 내 닉네임이면 /profile, 아니면 /profile-detail/:nickname
  */
 function goUserProfile(nickname) {
   if (!nickname) return
-  router.push({ name: 'profile-detail', params: { nickname } }).catch(() => {})
+
+  if (myNickname.value && nickname === myNickname.value) {
+    // 내 계정 → 내 프로필 화면으로
+    router.push({ name: 'profile' }).catch(() => {})
+  } else {
+    // 다른 유저 → 상세 프로필 페이지
+    router.push({ name: 'profile-detail', params: { nickname } }).catch(() => {})
+  }
 }
 
 /**
