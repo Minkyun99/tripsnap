@@ -1161,6 +1161,88 @@ class BakeryExpertRAG:
 
         return [(it["bakery"], it["score"]) for it in route]
 
+    def _filter_candidates_by_travel_time_from_origin(
+        self,
+        candidates: List[Dict[str, Any]],
+        loc_filter: Optional[LocationFilter],
+        transport_mode: TransportMode,
+        logs: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        시작 위치(사용자 좌표/역 근처) 기준으로
+        - 도보: 20분
+        - 대중교통/지하철/버스: 30분
+        - 자차: 40분
+        이내로만 갈 수 있는 빵집만 남긴다.
+        """
+        if loc_filter is None or loc_filter.kind != "point":
+            return list(candidates)
+
+        if loc_filter.lat is None or loc_filter.lon is None:
+            return list(candidates)
+
+        user_lat = loc_filter.lat
+        user_lon = loc_filter.lon
+
+        # 모드별 최대 허용 시간(분)
+        if transport_mode == TransportMode.WALK:
+            max_min = 20.0
+        elif transport_mode in {TransportMode.SUBWAY, TransportMode.BUS, TransportMode.TRANSIT_MIXED}:
+            max_min = 30.0
+        elif transport_mode == TransportMode.CAR:
+            max_min = 40.0
+        else:
+            max_min = 30.0  # 기본값
+
+        kept: List[Dict[str, Any]] = []
+        before = len(candidates)
+
+        for b in candidates:
+            try:
+                lat = float(b.get("latitude") or 0.0)
+                lon = float(b.get("longitude") or 0.0)
+                if not lat or not lon:
+                    # 좌표가 없으면 시간 필터를 적용할 수 없으므로 일단 유지
+                    kept.append(b)
+                    continue
+            except Exception:
+                kept.append(b)
+                continue
+
+            dist_km, walk_min, car_min = self._get_leg_distance_and_durations(
+                user_lat, user_lon, lat, lon
+            )
+
+            # 모드별 실제 이동시간 추정
+            if transport_mode == TransportMode.WALK:
+                travel_min = walk_min
+            elif transport_mode == TransportMode.CAR:
+                if car_min > 0:
+                    travel_min = car_min
+                else:
+                    travel_min = estimate_transit_time_minutes(
+                        dist_km, TransportMode.CAR
+                    )
+            else:
+                # 대중교통/지하철/버스 → 차량 시간에 여유를 좀 더 준 보정
+                if car_min > 0:
+                    travel_min = max(car_min * 1.5, walk_min * 0.6, 10.0)
+                else:
+                    travel_min = max(walk_min * 0.6, 10.0)
+
+            if travel_min <= max_min + 1e-6:
+                kept.append(b)
+
+        after = len(kept)
+        if logs is not None:
+            mode_name = getattr(transport_mode, "name", str(transport_mode))
+            logs.append(
+                f"📍 시작 위치 기준 이동시간 필터 후 후보: {before} → {after}개 "
+                f"(모드={mode_name}, 최대 {int(max_min)}분 이내)"
+            )
+
+        return kept
+
     # ==============================
     #  메인 질의 처리
     # ==============================
@@ -1171,10 +1253,23 @@ class BakeryExpertRAG:
         query_type = self._infer_query_type(query)
         logs.append(f"🧭 질의 타입: {query_type}")
 
+        # ① 빵/디저트와 무관한 질문이면 즉시 거절 응답
+        if query_type == "irrelevant":
+            return (
+                "이 챗봇은 **빵집·디저트 맛집 추천**과 **빵/디저트 관련 지식** 질문만 도와드릴 수 있습니다.\n"
+                "지금 주신 질문은 이 범위와 관련이 없어 답변해 드리기 어렵습니다.\n\n"
+                "대신 예를 들어 다음과 같은 질문을 해 보실 수 있어요.\n"
+                "  - '대전역 근처 휘낭시에 맛집 추천해줘'\n"
+                "  - '구암역 근처 마들렌 맛집을 추천해줘'\n"
+                "  - '마들렌이랑 휘낭시에 차이가 뭐야?'\n"
+            )
+
+        # ② 빵/디저트 '지식' 질문이면 지식 모드로 처리
         if query_type == "knowledge":
             answer_text = self._answer_knowledge_query_with_llm(query)
             return answer_text
 
+        # ③ 나머지는 빵집 추천 로직 (기존 코드 그대로)
         loc_filter, loc_logs = extract_location_from_query(query)
         logs.extend(loc_logs)
 
@@ -1183,6 +1278,7 @@ class BakeryExpertRAG:
 
         dt_constraint = parse_date_time_from_query(query)
 
+        # '지금/바로' 의도가 없을 때는 기본적으로 현재시각을 쓰지 않음
         if (
             not dt_constraint.has_date_range
             and dt_constraint.start_time is None
@@ -1199,12 +1295,14 @@ class BakeryExpertRAG:
             f"use_now_if_missing={dt_constraint.use_now_if_missing}"
         )
 
+        # 3) 메뉴 키워드 / 플래그십 의도
         menu_keywords = extract_menu_keywords(query, self.menu_keywords_set)
         logs.append(f"🍞 메뉴 키워드 인식: {menu_keywords}")
 
         intent_flags = detect_flagship_tour_intent(query, menu_keywords)
         logs.append(f"🧭 의도 플래그: {intent_flags}")
 
+        # 4) 벡터 검색 쿼리 생성
         search_queries = generate_search_queries(
             user_query=query,
             menu_keywords=menu_keywords,
@@ -1215,17 +1313,36 @@ class BakeryExpertRAG:
         for q in search_queries:
             logs.append(f"   - {q}")
 
+        # 5) 벡터 검색 → 1차 후보
         candidates = self._vector_search_bakeries(search_queries, top_k=80)
-        logs.append(
-            f"🔎 벡터 검색 기반 1차 후보: {len(candidates)}개"
-        )
+        logs.append(f"🔎 벡터 검색 기반 1차 후보: {len(candidates)}개")
 
+        # 6) 행정구역/반경 기반 위치 필터
         before_loc = len(candidates)
         candidates = filter_bakeries_by_location(candidates, loc_filter)
-        logs.append(
-            f"📍 위치/범위 필터 후 후보: {before_loc} → {len(candidates)}개"
+        logs.append(f"📍 위치/범위 필터 후 후보: {before_loc} → {len(candidates)}개")
+
+        # 7) 시작 위치 기준 "이동시간" 필터 (도보 20분 / 대중교통 30분 / 자차 40분 룰)
+        before_travel = len(candidates)
+        candidates = self._filter_candidates_by_travel_time_from_origin(
+            candidates=candidates,
+            loc_filter=loc_filter,
+            transport_mode=transport_mode,
+            logs=logs,
         )
 
+        # 후보가 너무 빡세게 줄어들면, 로그를 남기고 그대로 진행
+        if before_travel > 0 and len(candidates) == 0:
+            logs.append(
+                "⚠️ 이동시간 필터에서 모든 후보가 제거되어, "
+                "이동시간 필터 이전 후보를 그대로 사용합니다."
+            )
+            candidates = filter_bakeries_by_location(
+                self._vector_search_bakeries(search_queries, top_k=80),
+                loc_filter,
+            )
+
+        # 8) 랭킹 (1차 시도)
         user_lat = getattr(loc_filter, "lat", None)
         user_lon = getattr(loc_filter, "lon", None)
 
@@ -1241,15 +1358,37 @@ class BakeryExpertRAG:
         )
         logs.extend(ranking_logs)
 
+        original_ranked_list = list(ranked_list)
+
+        # 8-1) 메뉴 키워드 때문에 너무 빡세게 걸러져 0개가 되는 경우 → 메뉴 키워드 없이 한 번 더 랭킹
+        if not ranked_list and menu_keywords:
+            logs.append(
+                "⚠️ 1차 랭킹 결과가 0개라, 메뉴 키워드를 무시하고 재랭킹을 시도합니다."
+            )
+            ranked_list, ranking_logs2 = rank_bakeries(
+                user_query=query,
+                candidates=candidates,
+                menu_keywords=[],  # 메뉴 제약 해제
+                loc_filter=loc_filter,
+                user_lat=user_lat,
+                user_lon=user_lon,
+                transport_mode=transport_mode,
+                intent_flags=intent_flags,
+            )
+            logs.extend(ranking_logs2)
+            original_ranked_list = list(ranked_list)
+
+        # 9) 동선 최적화 (지하철/도보/자차 모드별)
         if ranked_list:
             if transport_mode == TransportMode.WALK:
                 travel_mode_str = "walk"
             elif transport_mode == TransportMode.CAR:
                 travel_mode_str = "car"
             else:
+                # SUBWAY / BUS / TRANSIT_MIXED → 지하철 라인 기반 동선(한 방향) + 일반 대중교통
                 travel_mode_str = "transit"
 
-            ranked_list = self._order_bakeries_by_route(
+            routed = self._order_bakeries_by_route(
                 ranked=ranked_list,
                 loc_filter=loc_filter,
                 travel_mode=travel_mode_str,
@@ -1257,12 +1396,55 @@ class BakeryExpertRAG:
                 menu_keywords=menu_keywords,
             )
 
+            # 동선 최적화 결과가 비어버리는 방어 로직
+            if routed:
+                ranked_list = routed
+            else:
+                logs.append(
+                    "⚠️ 동선 최적화 이후 매장이 0개가 되어, "
+                    "동선 최적화를 적용하지 않고 원래 랭킹 결과를 그대로 사용합니다."
+                )
+                ranked_list = [
+                    (b, 0.0) for b in original_ranked_list
+                ]
+
+        # 10) 상위 N개만 사용
         MAX_RESULTS = 10
         if len(ranked_list) > MAX_RESULTS:
             ranked_list = ranked_list[:MAX_RESULTS]
 
-        explain_lines: List[str] = []
+        # ranked_bakeries 리스트만 별도 추출
+        ranked_bakeries_only = [b for (b, _) in ranked_list]
 
+        # 11) "별도 시간 미지정"인 경우, 추천 매장 중 가장 이른 오픈 시각을 시작 시각으로 사용
+        if (
+            ranked_bakeries_only
+            and not dt_constraint.has_date_range
+            and dt_constraint.start_time is None
+            and not dt_constraint.use_now_if_missing
+        ):
+            earliest_min: Optional[int] = None
+            for b in ranked_bakeries_only:
+                m = self._get_earliest_open_minutes(b)
+                if m is None:
+                    continue
+                if earliest_min is None or m < earliest_min:
+                    earliest_min = m
+
+            if earliest_min is not None:
+                h = earliest_min // 60
+                mm = earliest_min % 60
+                try:
+                    dt_constraint.start_time = time(hour=h, minute=mm)
+                    logs.append(
+                        f"⏰ 별도 방문 시작 시간이 없어, 추천 매장 중 가장 이른 오픈 시각 "
+                        f"({h:02d}:{mm:02d})을 기준으로 일정을 시작합니다."
+                    )
+                except Exception:
+                    pass
+
+        # 12) 설명 헤더 구성
+        explain_lines: List[str] = []
         explain_lines.append("=" * 60)
         explain_lines.append(f"🔍 '{query}'")
         explain_lines.append("=" * 60)
@@ -1277,6 +1459,7 @@ class BakeryExpertRAG:
 
         explain_lines.append("")
 
+        # 이동수단 라벨
         if transport_mode in {TransportMode.SUBWAY, TransportMode.BUS, TransportMode.TRANSIT_MIXED}:
             route_desc = "대중교통 이동 기준 동선"
         elif transport_mode == TransportMode.WALK:
@@ -1286,6 +1469,7 @@ class BakeryExpertRAG:
         else:
             route_desc = "이동 수단을 고려한 동선"
 
+        # 날짜 설명
         if dt_constraint.has_date_range and dt_constraint.start_date:
             if dt_constraint.end_date and dt_constraint.start_date == dt_constraint.end_date:
                 date_desc = f"{dt_constraint.start_date} 하루"
@@ -1303,9 +1487,10 @@ class BakeryExpertRAG:
             f"({route_desc} 포함) 아래와 같이 코스를 구성했습니다.\n"
         )
 
+        # 13) 실제 답변 본문 생성
         answer_body = self.render_answer(
             user_query=query,
-            ranked_bakeries=[b for b, _ in ranked_list],
+            ranked_bakeries=ranked_bakeries_only,
             loc_filter=loc_filter,
             dt_constraint=dt_constraint,
             transport_mode=transport_mode,
@@ -1316,6 +1501,7 @@ class BakeryExpertRAG:
 
         full_answer = "\n".join(explain_lines) + "\n" + answer_body
         return full_answer
+
 
     def render_answer(
         self,
@@ -1786,32 +1972,91 @@ class BakeryExpertRAG:
             )
 
     def _infer_query_type(self, query: str) -> str:
+        """
+        질의 타입 분류:
+        - recommend  : 빵집/디저트 맛집·코스 추천
+        - knowledge  : 빵/디저트 자체에 대한 지식 질문
+        - irrelevant : 빵/디저트와 무관한 질문 → 답변 거절
+        """
         q = query.strip()
+        q_nospace = q.replace(" ", "")
+        q_lower = q_nospace.lower()
 
+        # 1) "빵/디저트 관련 질문인지" 먼저 판별 --------------------
+        #    - 고정 키워드는 최소한만 두고
+        #    - 나머지는 base_keywords.json에서 로드한 메뉴 키워드에 의존
+        core_bakery_tokens = [
+            "빵", "빵집", "베이커리",
+            "디저트", "카페",
+            "케이크", "케익",
+            "구움과자", "브레드",
+        ]
+
+        is_bakery_related = any(tok in q for tok in core_bakery_tokens)
+
+        # base_keywords.json 의 메뉴 키워드를 전부 스캔
+        # (예: 마들렌, 휘낭시에, 크로와상/크루아상, 까눌레, 팡도르, 에클레어 등)
+        if not is_bakery_related and getattr(self, "menu_keywords_set", None):
+            for mk in self.menu_keywords_set:
+                if not mk:
+                    continue
+                if mk in q:
+                    is_bakery_related = True
+                    break
+
+        # 영어권 키워드 (영문 질의용 – 최소만)
+        if not is_bakery_related:
+            bakery_keywords_en = [
+                "bread", "bakery", "cake", "dessert",
+                "croissant", "baguette", "macaron",
+                "madeleine", "financier", "scone",
+                "tart", "pie", "cookie", "donut", "doughnut",
+            ]
+            if any(tok in q_lower for tok in bakery_keywords_en):
+                is_bakery_related = True
+
+        # 여기까지 했는데도 아무 관련 키워드가 없으면 → 이 챗봇의 도메인 밖
+        if not is_bakery_related:
+            return "irrelevant"
+
+        # 2) 빵/디저트 관련으로 확정된 이후, "추천 vs 지식" 분리 -------------------
+
+        # (1) 추천/코스 의도
         recommend_keywords = [
-            "추천해줘", "추천해 주세요", "추천해주세요",
+            "추천해줘", "추천 해줘", "추천해 주세요", "추천해주세요",
             "맛집", "빵집 추천", "코스", "빵지순례",
             "어디 갈까", "어디가 좋을까", "어디가 좋나요",
-            "가고 싶은", "갈 만한", "가면 좋은",
+            "갈 만한", "가면 좋은", "가고 싶은",
+            "코스 짜줘", "코스짜줘", "루트 짜줘", "동선 짜줘",
         ]
         for kw in recommend_keywords:
             if kw in q:
                 return "recommend"
 
+        # "추천"이라는 단어가 들어오면 기본적으로 추천 의도로 간주
+        if "추천" in q:
+            return "recommend"
+
+        # (2) 지식/이론 질문 의도
         knowledge_keywords = [
-            "어떤 종류", "종류가 있나요", "종류는?", "종류 알려줘",
+            "어떤 종류", "종류가 있나요", "종류는", "종류 알려줘",
             "차이점", "차이가 뭐야", "차이가 뭔가요",
             "유래", "역사", "기원", "특징", "설명해줘",
-            "어떻게 만드는", "레시피", "만드는 법",
+            "왜 이렇게", "왜 그런가요", "원리", "원칙",
+            "레시피", "만드는 법", "만드는법", "방법",
+            "반죽", "발효", "굽는", "굽기", "온도", "시간",
         ]
         for kw in knowledge_keywords:
             if kw in q:
                 return "knowledge"
 
-        if "?" in q and "맛집" not in q and "추천" not in q and "코스" not in q:
+        # 물음표가 있으면서 '맛집/추천/코스'가 없으면 → 지식 질문일 가능성이 높다고 보고 knowledge
+        if "?" in q and not any(k in q for k in ["맛집", "추천", "코스", "빵집 추천"]):
             return "knowledge"
 
+        # 3) 그 외는 기본적으로 "추천"으로 처리
         return "recommend"
+
 
     # ==============================
     #  인터랙티브 모드
