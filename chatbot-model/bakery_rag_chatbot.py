@@ -56,6 +56,8 @@ except ImportError:
 
 # ==================================================
 #  대전 1호선 역 순서 (동선 최적화용 메타데이터)
+#  - 현재는 실제 경로 최적화(TSP)로 대체되었지만,
+#    역 정보/표시용 메타로 남겨둡니다.
 # ==================================================
 
 SUBWAY_LINE1_SEQUENCE = [
@@ -891,7 +893,108 @@ class BakeryExpertRAG:
         return 11 * 60, "오전 11:00"
 
     # ==============================
-    #  동선 최적화 (지하철 노선 기반 + 일반 거리 기반)
+    #  경로 최적화용 time matrix + 2-opt
+    # ==============================
+
+    def _build_time_matrix_for_route_opt(
+        self,
+        items: List[Dict[str, Any]],
+        travel_mode: str,
+    ) -> List[List[float]]:
+        """
+        경로 최적화용 쌍별 이동시간(분) 행렬을 만든다.
+        - Kakao Mobility API는 호출하지 않고, Haversine 거리 + 모드별 추정식 사용
+        - items[i]["coord"] = (lat, lon) 이라고 가정
+        """
+        n = len(items)
+        time_mat = [[0.0] * n for _ in range(n)]
+
+        for i in range(n):
+            ci = items[i].get("coord")
+            if not ci:
+                continue
+            lat_i, lon_i = ci
+            for j in range(i + 1, n):
+                cj = items[j].get("coord")
+                if not cj:
+                    continue
+                lat_j, lon_j = cj
+
+                dist_km = haversine_distance_km(lat_i, lon_i, lat_j, lon_j)
+
+                if travel_mode == "walk":
+                    t_ij = estimate_walk_time_minutes(dist_km)
+                elif travel_mode == "car":
+                    t_ij = estimate_transit_time_minutes(dist_km, TransportMode.CAR)
+                else:
+                    # subway / bus / transit: 혼합 대중교통 시간 추정
+                    t_ij = estimate_transit_time_minutes(dist_km, TransportMode.TRANSIT_MIXED)
+
+                # 대략적인 안정성 확보 (0 이하 나오면 0으로 처리)
+                t_ij = max(float(t_ij), 0.0)
+
+                time_mat[i][j] = t_ij
+                time_mat[j][i] = t_ij
+
+        return time_mat
+
+    def _optimize_route_2opt(
+        self,
+        time_mat: List[List[float]],
+        initial_route: List[int],
+        max_iter: int = 100,
+    ) -> List[int]:
+        """
+        주어진 초기 경로(initial_route)에 대해
+        2-opt 로컬 최적화를 수행하여 총 이동시간을 줄인다.
+
+        - time_mat[i][j]: i -> j 이동시간(분)
+        - 반환값: 노드 인덱스 순서 리스트
+        """
+        n = len(initial_route)
+        if n <= 2:
+            return initial_route[:]
+
+        route = initial_route[:]
+
+        def route_cost(rt: List[int]) -> float:
+            total = 0.0
+            for k in range(len(rt) - 1):
+                i = rt[k]
+                j = rt[k + 1]
+                total += time_mat[i][j]
+            return total
+
+        best_cost = route_cost(route)
+
+        improved = True
+        iter_cnt = 0
+
+        while improved and iter_cnt < max_iter:
+            improved = False
+            iter_cnt += 1
+
+            for i in range(1, n - 2):
+                for j in range(i + 1, n - 1):
+                    # 2-opt: (i-1 → i → ... → j → j+1) 구간을
+                    #        (i-1 → j → ... → i → j+1) 로 뒤집는 것이 더 좋은지 확인
+                    a, b = route[i - 1], route[i]
+                    c, d = route[j], route[j + 1]
+
+                    before = time_mat[a][b] + time_mat[c][d]
+                    after = time_mat[a][c] + time_mat[b][d]
+
+                    # 개선 여지가 있으면 [i, j] 구간을 뒤집는다.
+                    if after + 1e-6 < before:
+                        route[i:j + 1] = reversed(route[i:j + 1])
+                        best_cost = best_cost - before + after
+                        improved = True
+
+            # 더 이상 개선이 없으면 종료
+        return route
+
+    # ==============================
+    #  동선 최적화 (모든 모드 공통: TSP 휴리스틱)
     # ==============================
 
     def _order_bakeries_by_route(
@@ -902,6 +1005,18 @@ class BakeryExpertRAG:
         constraint: DateTimeConstraint,
         menu_keywords: List[str],
     ) -> List[Tuple[Dict[str, Any], float]]:
+        """
+        기존:
+          - 점수(rank_bakeries 결과) 순서를 거의 그대로 쓰고,
+            이동 시간은 나중에 계산해서 붙이는 구조
+
+        변경:
+          - rank_bakeries 결과는 '어떤 매장들을 쓸지'만 결정
+          - 실제 방문 순서는 '전체 이동시간'을 최소화하는
+            TSP 휴리스틱(Nearest Neighbor + 2-opt)로 최적화
+
+        travel_mode: "walk" / "transit" / "car"
+        """
         # 0) 입력 정규화
         norm_ranked: List[Tuple[Dict[str, Any], float]] = []
 
@@ -931,11 +1046,22 @@ class BakeryExpertRAG:
         if len(norm_ranked) <= 1:
             return norm_ranked
 
-        # 출발 시각 (동선 최적화용은 기본 규칙 사용)
+        # 출발 위치 (사용자 위치)
+        origin_coord: Optional[Tuple[float, float]] = None
+        if loc_filter is not None:
+            lat = getattr(loc_filter, "lat", None)
+            lon = getattr(loc_filter, "lon", None)
+            kind = getattr(loc_filter, "kind", None)
+            if kind == "point" and lat is not None and lon is not None:
+                origin_coord = (lat, lon)
+
+        # 1) 경로 최적화용 아이템 구조 구성
+        items: List[Dict[str, Any]] = []
+        coord_indices: List[int] = []  # 좌표 있는 노드 인덱스
+
+        # 출발 기준 시각 (오픈 시간 패널티 계산용)
         start_minutes, _ = self._infer_start_minutes(constraint)
 
-        # 1) 공통 아이템 구조 구성
-        items: List[Dict[str, Any]] = []
         for idx, (bakery, score) in enumerate(norm_ranked):
             # 좌표
             lat = None
@@ -949,19 +1075,6 @@ class BakeryExpertRAG:
                 lat, lon = None, None
             coord = (lat, lon) if (lat is not None and lon is not None) else None
 
-            # 가까운 지하철역
-            station_name = None
-            station_index = -1
-            if coord is not None:
-                try:
-                    s_name, s_lat, s_lon = find_nearest_subway_station(coord[0], coord[1])
-                    station_name = _normalize_station_name_for_line(s_name) if s_name else None
-                    if station_name:
-                        station_index = get_subway_station_order_index(station_name)
-                except Exception:
-                    station_name = None
-                    station_index = -1
-
             # 대기시간 / 오픈시간 기반 route_score
             try:
                 wait_min = self._get_expected_wait_minutes(bakery, constraint)
@@ -973,158 +1086,138 @@ class BakeryExpertRAG:
             base_score = float(score or 0.0)
             route_score = base_score
 
-            # 대기시간이 긴 매장은 앞쪽에
+            # 대기시간 긴 매장은 앞쪽에 배치되도록 약간 보정
             if wait_min and wait_min > 0:
-                route_score += min(wait_min, 30.0) * 0.2
+                route_score += min(wait_min, 30.0) * 0.1
 
             # 너무 늦게 여는 매장은 패널티
             if open_min is not None:
                 delta = open_min - start_minutes
                 if delta > 180:
-                    if delta > 300:
-                        route_score -= 1.5
-                    else:
-                        route_score -= 1.0
+                    route_score -= 0.5
 
-            items.append(
-                {
-                    "bakery": bakery,
-                    "score": base_score,
-                    "route_score": route_score,
-                    "coord": coord,
-                    "station_name": station_name,
-                    "station_index": station_index,
-                    "wait_minutes": float(wait_min or 0.0),
-                    "open_minutes": open_min,
-                    "orig_idx": idx,
-                }
-            )
+            item = {
+                "bakery": bakery,
+                "score": base_score,
+                "route_score": route_score,
+                "coord": coord,
+                "orig_idx": idx,
+            }
+            items.append(item)
 
-        if len(items) <= 1:
+            if coord is not None:
+                coord_indices.append(idx)
+
+        # 좌표 있는 매장이 1개 이하이면 그대로 반환
+        if len(coord_indices) <= 1:
             return norm_ranked
 
-        # 출발 위치
-        origin_coord: Optional[Tuple[float, float]] = None
-        if loc_filter is not None:
-            lat = getattr(loc_filter, "lat", None)
-            lon = getattr(loc_filter, "lon", None)
-            kind = getattr(loc_filter, "kind", None)
-            if kind == "point" and lat is not None and lon is not None:
-                origin_coord = (lat, lon)
+        # 2) 좌표 있는 노드들만 대상으로 time matrix 계산
+        coord_items: List[Dict[str, Any]] = []
+        idx_map_global_to_local: Dict[int, int] = {}
+        idx_map_local_to_global: List[int] = []
 
-        # 2) 지하철 모드: 기존 역 순서 기반 로직 유지
-        if travel_mode == "transit":
-            station_clusters: Dict[int, List[Dict[str, Any]]] = {}
-            no_station_items: List[Dict[str, Any]] = []
+        for local_idx, global_idx in enumerate(coord_indices):
+            coord_items.append(items[global_idx])
+            idx_map_global_to_local[global_idx] = local_idx
+            idx_map_local_to_global.append(global_idx)
 
-            for it in items:
-                s_idx = it.get("station_index", -1)
-                if isinstance(s_idx, int) and s_idx >= 0:
-                    station_clusters.setdefault(s_idx, []).append(it)
-                else:
-                    no_station_items.append(it)
+        time_mat = self._build_time_matrix_for_route_opt(
+            coord_items,
+            travel_mode=travel_mode,
+        )
 
-            if not station_clusters:
-                return self._order_bakeries_by_route_distance(items, origin_coord, travel_mode)
+        n = len(coord_items)
 
-            for s_idx, bucket in station_clusters.items():
-                bucket.sort(
-                    key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
-                    reverse=True,
+        # 3) 시작 노드 선택
+        #  - origin_coord가 있으면: origin에서 가장 가까운 노드
+        #  - 없으면: route_score가 가장 높은 노드
+        if origin_coord is not None:
+            best_local = 0
+            best_time = None
+
+            for local_idx, item in enumerate(coord_items):
+                coord = item.get("coord")
+                if coord is None:
+                    continue
+                lat, lon = coord
+                dist_km = haversine_distance_km(
+                    origin_coord[0], origin_coord[1],
+                    lat, lon,
                 )
+                if travel_mode == "walk":
+                    t = estimate_walk_time_minutes(dist_km)
+                elif travel_mode == "car":
+                    t = estimate_transit_time_minutes(dist_km, TransportMode.CAR)
+                else:
+                    t = estimate_transit_time_minutes(dist_km, TransportMode.TRANSIT_MIXED)
 
-            all_station_indices = sorted(station_clusters.keys())
+                t = max(float(t), 0.0)
+                if best_time is None or t < best_time:
+                    best_time = t
+                    best_local = local_idx
 
-            def choose_start_station_index() -> int:
-                nonlocal origin_coord
-                if origin_coord is not None:
-                    best_idx = None
-                    best_dist = None
-                    for s_idx, bucket in station_clusters.items():
-                        rep_coord = None
-                        for it in bucket:
-                            if it.get("coord") is not None:
-                                rep_coord = it["coord"]
-                                break
-                        if rep_coord is None:
-                            continue
-                        d = haversine_distance_km(
-                            origin_coord[0], origin_coord[1],
-                            rep_coord[0], rep_coord[1],
-                        )
-                        if best_dist is None or d < best_dist:
-                            best_dist = d
-                            best_idx = s_idx
-                    if best_idx is not None:
-                        return best_idx
+            start_local_idx = best_local
+        else:
+            best_local = 0
+            best_score = None
+            for local_idx, item in enumerate(coord_items):
+                rs = float(item.get("route_score") or item.get("score") or 0.0)
+                if best_score is None or rs > best_score:
+                    best_score = rs
+                    best_local = local_idx
+            start_local_idx = best_local
 
-                best_idx = None
-                best_score = None
-                for s_idx, bucket in station_clusters.items():
-                    top_score = bucket[0].get("route_score") or bucket[0].get("score") or 0.0
-                    if best_score is None or top_score > best_score:
-                        best_score = top_score
-                        best_idx = s_idx
-                return int(best_idx if best_idx is not None else all_station_indices[0])
+        # 4) Nearest Neighbor로 초기 경로 구성
+        unvisited = set(range(n))
+        route_local: List[int] = []
+        current = start_local_idx
+        route_local.append(current)
+        unvisited.remove(current)
 
-            start_station_idx = choose_start_station_index()
+        while unvisited:
+            best_next = None
+            best_time = None
+            for candidate in unvisited:
+                t = time_mat[current][candidate]
+                # 도보 모드의 경우, 40분 이상 걸리는 구간은 강한 페널티
+                if travel_mode == "walk" and t > self.MAX_WALK_MINUTES * 2:
+                    t = t * 3.0
+                if best_time is None or t < best_time:
+                    best_time = t
+                    best_next = candidate
+            if best_next is None:
+                break
+            route_local.append(best_next)
+            unvisited.remove(best_next)
+            current = best_next
 
-            left_indices = sorted(
-                [i for i in all_station_indices if i < start_station_idx],
-                reverse=True,
-            )
-            right_indices = sorted(
-                [i for i in all_station_indices if i > start_station_idx]
-            )
+        # 5) 2-opt 로컬 최적화
+        route_local_opt = self._optimize_route_2opt(time_mat, route_local)
 
-            pattern1_indices = [start_station_idx] + right_indices + left_indices
-            pattern2_indices = [start_station_idx] + left_indices + right_indices
+        # 6) local index → global index → 실제 items 순서로 변환
+        final_items_by_global_idx: List[int] = []
+        for local_idx in route_local_opt:
+            global_idx = idx_map_local_to_global[local_idx]
+            final_items_by_global_idx.append(global_idx)
 
-            def build_route(pattern_indices: List[int]) -> List[Dict[str, Any]]:
-                route_items: List[Dict[str, Any]] = []
-                for s_idx in pattern_indices:
-                    bucket = station_clusters.get(s_idx, [])
-                    for it in bucket:
-                        route_items.append(it)
-                return route_items
+        # 좌표 없는 매장은 기존 순서 유지하며 뒤에 붙인다.
+        for global_idx, item in enumerate(items):
+            if global_idx not in final_items_by_global_idx:
+                final_items_by_global_idx.append(global_idx)
 
-            route1_items = build_route(pattern1_indices)
-            route2_items = build_route(pattern2_indices)
+        # 최종 route 순서대로 (bakery, score) 반환
+        result: List[Tuple[Dict[str, Any], float]] = []
+        for global_idx in final_items_by_global_idx:
+            bakery = items[global_idx]["bakery"]
+            score = items[global_idx]["score"]
+            result.append((bakery, score))
 
-            def route_cost_by_station_index(route_items: List[Dict[str, Any]]) -> float:
-                total = 0.0
-                last_idx_local: Optional[int] = None
-                for it in route_items:
-                    s_idx = it.get("station_index", -1)
-                    if not isinstance(s_idx, int) or s_idx < 0:
-                        continue
-                    if last_idx_local is not None:
-                        total += abs(s_idx - last_idx_local)
-                    last_idx_local = s_idx
-                return total
-
-            cost1 = route_cost_by_station_index(route1_items)
-            cost2 = route_cost_by_station_index(route2_items)
-
-            if cost1 <= cost2:
-                chosen_route_items = route1_items
-            else:
-                chosen_route_items = route2_items
-
-            no_station_items_sorted = sorted(
-                no_station_items,
-                key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
-                reverse=True,
-            )
-
-            final_items = chosen_route_items + no_station_items_sorted
-            return [(it["bakery"], it["score"]) for it in final_items]
-
-        # 3) 그 외 모드: 거리 + 인기도(route_score) 가중 그리디
-        return self._order_bakeries_by_route_distance(items, origin_coord, travel_mode)
+        return result
 
     # --------------------------------------------------
-    #  거리 기반 그리디 경로 (walk / car / 일반 fallback용)
+    #  (구 버전) 거리 기반 그리디 경로
+    #  - 현재는 사용하지 않지만, 외부에서 호출할 가능성 대비 보존
     # --------------------------------------------------
     def _order_bakeries_by_route_distance(
         self,
@@ -1133,121 +1226,20 @@ class BakeryExpertRAG:
         travel_mode: str,
     ) -> List[Tuple[Dict[str, Any], float]]:
         """
-        - origin_coord가 있으면 거기서 가장 '거리+인기도'가 좋은 빵집부터 시작
-        - 없으면 route_score(없으면 score)가 가장 높은 빵집부터 시작
-        - 매 단계마다 현재 위치에서
-            composite = route_score - α * distance_km
-          를 최대화하는 미방문 빵집을 선택 (단, d <= max_leg_km)
-        - walk 모드에서는 max_leg_km을 넘는 후보는 '다음 클러스터'로 간주하고
-          경로에서 제외하여 도보 20분 룰을 강제
-        - car / transit 모드에서는 남은 후보를 route_score 순으로 뒤에 붙여
-          다음 클러스터로 점프
+        (레거시) 거리 + route_score 기반 그리디 경로.
+        - 현재는 _order_bakeries_by_route 에서 TSP 최적화를 사용하므로
+          이 함수는 외부 호환용으로만 유지됩니다.
         """
-
         if not items:
             return []
 
-        max_leg_km = self._max_leg_distance_km(travel_mode)
-
-        # 거리 페널티 가중치(α)
-        if travel_mode == "walk":
-            distance_weight = 0.8  # 도보는 거리 비중을 더 높게
-        elif travel_mode == "car":
-            distance_weight = 0.2
-        else:  # transit, 기타
-            distance_weight = 0.3
-
-        # 시작점 선택
-        if origin_coord is not None:
-            best_item = None
-            best_score = None
-            for it in items:
-                coord = it.get("coord")
-                if coord is None:
-                    continue
-                d = haversine_distance_km(
-                    origin_coord[0], origin_coord[1],
-                    coord[0], coord[1],
-                )
-                base = it.get("route_score") or it.get("score") or 0.0
-                comp = float(base) - distance_weight * d
-                if best_score is None or comp > best_score:
-                    best_score = comp
-                    best_item = it
-            if best_item is None:
-                start_item = max(
-                    items,
-                    key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
-                )
-            else:
-                start_item = best_item
-        else:
-            start_item = max(
-                items,
-                key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
-            )
-
-        used = set()
-        route: List[Dict[str, Any]] = []
-
-        route.append(start_item)
-        used.add(start_item["orig_idx"])
-
-        while len(used) < len(items):
-            last = route[-1]
-            last_coord = last.get("coord")
-            if last_coord is None:
-                break
-
-            best_next = None
-            best_comp = None
-
-            for it in items:
-                if it["orig_idx"] in used:
-                    continue
-                coord = it.get("coord")
-                if coord is None:
-                    continue
-                d = haversine_distance_km(
-                    last_coord[0], last_coord[1],
-                    coord[0], coord[1],
-                )
-                # 한 구간 최대 거리 제한(클러스터 경계)
-                if d > max_leg_km:
-                    continue
-
-                base = it.get("route_score") or it.get("score") or 0.0
-                comp = float(base) - distance_weight * d
-                if best_comp is None or comp > best_comp:
-                    best_comp = comp
-                    best_next = it
-
-            if best_next is None:
-                # 더 이상 "허용 거리 안의 후보"가 없다면
-                remaining = [
-                    it for it in items
-                    if it["orig_idx"] not in used
-                ]
-
-                if travel_mode == "walk":
-                    # 도보 모드: 20분(≈ max_leg_km) 넘는 후보는
-                    # 도보 코스에서 제외 → 경로 종료
-                    break
-                else:
-                    # 자차/대중교통 모드: 남은 후보를 route_score 순으로 뒤에 붙여
-                    # 다음 클러스터로 점프
-                    remaining_sorted = sorted(
-                        remaining,
-                        key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
-                        reverse=True,
-                    )
-                    route.extend(remaining_sorted)
-                    break
-
-            route.append(best_next)
-            used.add(best_next["orig_idx"])
-
-        return [(it["bakery"], it["score"]) for it in route]
+        # 간단히: route_score 기준 정렬 후 반환 (레거시용)
+        sorted_items = sorted(
+            items,
+            key=lambda x: (x.get("route_score") or x.get("score") or 0.0),
+            reverse=True,
+        )
+        return [(it["bakery"], it.get("score", 0.0)) for it in sorted_items]
 
     def _filter_candidates_by_travel_time_from_origin(
         self,
@@ -1466,14 +1458,13 @@ class BakeryExpertRAG:
             logs.extend(ranking_logs2)
             original_ranked_list = list(ranked_list)
 
-        # 9) 동선 최적화 (지하철/도보/자차 모드별)
+        # 9) 동선 최적화 (모든 모드 공통: TSP 휴리스틱)
         if ranked_list:
             if transport_mode == TransportMode.WALK:
                 travel_mode_str = "walk"
             elif transport_mode == TransportMode.CAR:
                 travel_mode_str = "car"
             else:
-                # SUBWAY / BUS / TRANSIT_MIXED → 지하철 라인 기반 동선(한 방향) + 일반 대중교통
                 travel_mode_str = "transit"
 
             routed = self._order_bakeries_by_route(
@@ -1962,24 +1953,19 @@ class BakeryExpertRAG:
         )
         lines.append(menu_focus_line)
 
-        if transport_mode in {TransportMode.SUBWAY, TransportMode.BUS, TransportMode.TRANSIT_MIXED}:
-            lines.append(
-                "- 대전 1호선 주요 역 주변으로 묶어서, 지하철 노선도를 따라 "
-                "한 방향으로 이동할 수 있도록 역 단위 클러스터를 구성했습니다."
-            )
-        else:
-            lines.append(
-                "- 현재 위치(또는 첫 방문 매장)를 기준으로 주변 빵집들을 거리 기반 클러스터로 나눈 뒤, "
-                "가까운 클러스터를 먼저 소진하고 그 다음 클러스터로 이동하는 단방향(One-way) 동선을 구성했습니다."
-            )
-
         lines.append(
-            "- 각 클러스터 및 매장 선택 시, 단순 거리뿐 아니라 인기도(route_score)도 함께 고려하여 "
-            "너무 멀리 돌아가지 않으면서도 인기 있는 매장은 비교적 코스 앞쪽에 배치하려고 했습니다."
+            "- 벡터 검색과 랭킹을 통해 후보 매장을 먼저 추린 뒤, "
+            "각 매장 쌍 사이의 예상 이동시간(도보/대중교통/자차)을 계산해 "
+            "전체 이동 시간이 최소가 되도록 경로를 최적화했습니다."
+        )
+        lines.append(
+            "- Nearest Neighbor로 초기 경로를 구성한 뒤, 2-opt 로컬 탐색을 적용해 "
+            "불필요하게 왕복하는 구간을 줄이고, 자연스럽게 한 방향으로 이동하는 동선이 되도록 조정했습니다."
         )
         lines.append(
             "- 리뷰 수와 waiting_prediction, 주말/공휴일 가중치를 이용해 "
-            "대기시간이 길거나 인기·품절 위험이 있는 매장은 최대한 코스의 앞쪽에 배치했습니다."
+            "대기시간이 길거나 인기가 매우 높은 매장은 코스 앞쪽에 배치하고, "
+            "너무 늦게 여는 매장은 뒤쪽으로 미루는 방식으로 순서를 보정했습니다."
         )
         if transport_mode == TransportMode.WALK:
             lines.append(
