@@ -600,6 +600,99 @@ class BakeryExpertRAG:
             return "walk"
         return travel_mode
 
+    def _format_minutes_to_hhmm(self, minutes: int) -> str:
+        minutes = minutes % (24 * 60)
+        h = minutes // 60
+        m = minutes % 60
+        return f"{h:02d}:{m:02d}"
+
+    def _decide_start_minutes_for_answer(
+        self,
+        dt_constraint: DateTimeConstraint,
+        ranked_bakeries: List[Dict[str, Any]],
+    ) -> Tuple[Optional[int], Optional[str], Optional[str]]:
+        """
+        날짜/시간이 명시되지 않은 '추천' 질문에 대해,
+        - 인기 있는 빵집들의 '가장 이른 오픈 시각'을 기준으로 출발 시각을 잡는다.
+        - 너무 이른 시간(00:00 등)은 버리고 07:00~12:30 사이만 사용한다.
+        - 인기 없는 새벽 오픈 매장은 무시하고, 다음 인기 매장의 오픈 시각을 사용한다.
+
+        반환: (start_minutes, start_label, reason_log)
+        - override 할 것이 없으면 (None, None, None) 반환 → 기존 _infer_start_minutes 사용
+        """
+
+        # 1) 사용자가 명시한 시간이 있거나, '지금/바로' 의도면 기존 로직을 그대로 사용
+        if (
+            (dt_constraint.has_date_range and dt_constraint.start_time is not None)
+            or dt_constraint.use_now_if_missing
+        ):
+            return None, None, None
+
+        if not ranked_bakeries:
+            return None, None, None
+
+        # 2) 후보 빵집들 중에서 오픈 시간/인기도 기준으로 최적의 출발 시각 선택
+        POP_REVIEW_THRESHOLD = 500      # 리뷰 500개 이상이면 '인기 매장'으로 간주
+        POP_SCORE_THRESHOLD = 7.5       # popularity score 기준 보조 조건
+        EARLIEST_ALLOWED = 7 * 60       # 07:00 이전은 너무 이르다고 보고 제외
+        LATEST_ALLOWED = 12 * 60 + 30   # 12:30 이후는 '출발 시각'으로는 사용하지 않음
+
+        best_popular_open: Optional[int] = None
+        best_normal_open: Optional[int] = None
+
+        for bakery in ranked_bakeries:
+            open_min = self._get_earliest_open_minutes(bakery)
+            if open_min is None:
+                continue
+
+            # 00:00, 01:00 같은 값은 24시간 영업 / 잘못 파싱된 값일 가능성이 크니 제외
+            if not (EARLIEST_ALLOWED <= open_min <= LATEST_ALLOWED):
+                continue
+
+            name = bakery.get("name") or bakery.get("slug_en") or ""
+            total_reviews, _ = self.review_stats_cache.get(name, (0, {}))
+            try:
+                total_reviews_int = int(str(total_reviews).replace(",", ""))
+            except Exception:
+                total_reviews_int = 0
+
+            try:
+                popularity = compute_popularity_score(bakery, self.review_stats_cache)
+            except Exception:
+                popularity = 0.0
+
+            is_popular = (
+                total_reviews_int >= POP_REVIEW_THRESHOLD
+                or popularity >= POP_SCORE_THRESHOLD
+            )
+
+            if is_popular:
+                if best_popular_open is None or open_min < best_popular_open:
+                    best_popular_open = open_min
+            else:
+                if best_normal_open is None or open_min < best_normal_open:
+                    best_normal_open = open_min
+
+        # 3) 인기 매장 기준으로 먼저 시도, 없으면 전체 기준, 둘 다 없으면 기존 11:00 유지
+        if best_popular_open is not None:
+            label = self._format_minutes_to_hhmm(best_popular_open)
+            reason = (
+                f"별도 방문 시작 시간이 없어, '인기 있는 빵집들' 중 가장 이른 오픈 시각 "
+                f"({label})을 기준으로 일정을 시작합니다."
+            )
+            return best_popular_open, label, reason
+
+        if best_normal_open is not None:
+            label = self._format_minutes_to_hhmm(best_normal_open)
+            reason = (
+                f"별도 방문 시작 시간이 없어, 추천 매장 중 가장 이른 오픈 시각 "
+                f"({label})을 기준으로 일정을 시작합니다."
+            )
+            return best_normal_open, label, reason
+
+        # 적절한 후보가 없으면 override 하지 않고, 기존 11:00 규칙으로 떨어지게 둔다.
+        return None, None, None
+
     # ==============================
     #  Kakao Mobility 길찾기 연동
     # ==============================
@@ -794,13 +887,8 @@ class BakeryExpertRAG:
             now = datetime.now()
             return now.hour * 60 + now.minute, f"현재 시각({now.strftime('%H:%M')})"
 
+        # 기본 fallback (추천 매장 오픈시간으로도 못 정했을 때만 사용)
         return 11 * 60, "오전 11:00"
-
-    def _format_minutes_to_hhmm(self, minutes: int) -> str:
-        minutes = minutes % (24 * 60)
-        h = minutes // 60
-        m = minutes % 60
-        return f"{h:02d}:{m:02d}"
 
     # ==============================
     #  동선 최적화 (지하철 노선 기반 + 일반 거리 기반)
@@ -843,7 +931,7 @@ class BakeryExpertRAG:
         if len(norm_ranked) <= 1:
             return norm_ranked
 
-        # 출발 시각
+        # 출발 시각 (동선 최적화용은 기본 규칙 사용)
         start_minutes, _ = self._infer_start_minutes(constraint)
 
         # 1) 공통 아이템 구조 구성
@@ -1269,7 +1357,7 @@ class BakeryExpertRAG:
             answer_text = self._answer_knowledge_query_with_llm(query)
             return answer_text
 
-        # ③ 나머지는 빵집 추천 로직 (기존 코드 그대로)
+        # ③ 나머지는 빵집 추천 로직
         loc_filter, loc_logs = extract_location_from_query(query)
         logs.extend(loc_logs)
 
@@ -1416,32 +1504,13 @@ class BakeryExpertRAG:
         # ranked_bakeries 리스트만 별도 추출
         ranked_bakeries_only = [b for (b, _) in ranked_list]
 
-        # 11) "별도 시간 미지정"인 경우, 추천 매장 중 가장 이른 오픈 시각을 시작 시각으로 사용
-        if (
-            ranked_bakeries_only
-            and not dt_constraint.has_date_range
-            and dt_constraint.start_time is None
-            and not dt_constraint.use_now_if_missing
-        ):
-            earliest_min: Optional[int] = None
-            for b in ranked_bakeries_only:
-                m = self._get_earliest_open_minutes(b)
-                if m is None:
-                    continue
-                if earliest_min is None or m < earliest_min:
-                    earliest_min = m
-
-            if earliest_min is not None:
-                h = earliest_min // 60
-                mm = earliest_min % 60
-                try:
-                    dt_constraint.start_time = time(hour=h, minute=mm)
-                    logs.append(
-                        f"⏰ 별도 방문 시작 시간이 없어, 추천 매장 중 가장 이른 오픈 시각 "
-                        f"({h:02d}:{mm:02d})을 기준으로 일정을 시작합니다."
-                    )
-                except Exception:
-                    pass
+        # 11) 출발 시각 결정 (사용자 지정 / 현재 시각 / 추천 매장 오픈시간)
+        start_min_override, start_label_override, start_reason = self._decide_start_minutes_for_answer(
+            dt_constraint=dt_constraint,
+            ranked_bakeries=ranked_bakeries_only,
+        )
+        if start_reason:
+            logs.append(f"⏰ {start_reason}")
 
         # 12) 설명 헤더 구성
         explain_lines: List[str] = []
@@ -1497,11 +1566,13 @@ class BakeryExpertRAG:
             intent_flags=intent_flags,
             menu_keywords=menu_keywords,
             debug_logs=logs,
+            start_minutes_override=start_min_override,
+            start_label_override=start_label_override,
+            start_reason=start_reason,
         )
 
         full_answer = "\n".join(explain_lines) + "\n" + answer_body
         return full_answer
-
 
     def render_answer(
         self,
@@ -1513,6 +1584,9 @@ class BakeryExpertRAG:
         intent_flags: Dict[str, Any],
         menu_keywords: List[str],
         debug_logs: List[str],
+        start_minutes_override: Optional[int] = None,
+        start_label_override: Optional[str] = None,
+        start_reason: Optional[str] = None,
     ) -> str:
         lines: List[str] = []
 
@@ -1525,7 +1599,13 @@ class BakeryExpertRAG:
         total_travel_min: float = 0.0
         total_wait_min: float = 0.0
 
-        start_minutes, start_label = self._infer_start_minutes(dt_constraint)
+        # 출발 시각/레이블 결정 (override가 있으면 그 값을 사용)
+        if start_minutes_override is not None and start_label_override is not None:
+            start_minutes = start_minutes_override
+            start_label = start_label_override
+        else:
+            start_minutes, start_label = self._infer_start_minutes(dt_constraint)
+
         current_time_min: float = float(start_minutes)
 
         if transport_mode == TransportMode.SUBWAY:
@@ -1540,9 +1620,28 @@ class BakeryExpertRAG:
             mode_label = "도보"
 
         lines.append(f"총 {len(ranked_bakeries)}곳의 빵집을 추천드립니다.\n")
-        lines.append(
-            f"(별도 방문 시작 시간이 명시되지 않아, 방문 시작 시각을 {start_label} 기준으로 가정했습니다.)\n"
-        )
+
+        # 출발 시각 안내 문구
+        if dt_constraint.has_date_range and dt_constraint.start_time is not None:
+            # 사용자가 명시적으로 시작 시간을 지정한 경우
+            lines.append(
+                f"(사용자께서 지정하신 시작 시각 {start_label}을 기준으로 코스를 구성했습니다.)\n"
+            )
+        elif dt_constraint.use_now_if_missing:
+            # '지금/바로' 등으로 현재 시각 기준인 경우
+            lines.append(
+                f"(별도 방문 시작 시간이 없어, 현재 시각 {start_label}을 기준으로 코스를 구성했습니다.)\n"
+            )
+        else:
+            # 별도 시간 언급이 없는 일반 추천 질의
+            if start_reason:
+                # _decide_start_minutes_for_answer 에서 만든 설명을 그대로 사용
+                lines.append(f"({start_reason})\n")
+            else:
+                # 혹시라도 override 가 없고 기본 11:00으로 떨어진 경우
+                lines.append(
+                    f"(별도 방문 시작 시간이 명시되지 않아, 방문 시작 시각을 {start_label} 기준으로 가정했습니다.)\n"
+                )
 
         prev_lat: Optional[float] = None
         prev_lon: Optional[float] = None
@@ -1982,20 +2081,41 @@ class BakeryExpertRAG:
         q_nospace = q.replace(" ", "")
         q_lower = q_nospace.lower()
 
-        # 1) "빵/디저트 관련 질문인지" 먼저 판별 --------------------
-        #    - 고정 키워드는 최소한만 두고
-        #    - 나머지는 base_keywords.json에서 로드한 메뉴 키워드에 의존
+        # --------------------------------
+        # 0) 우선, '명백히 빵이 아닌 음식/술' 토큰 필터
+        # --------------------------------
+        # 이 토큰들이 포함되어 있고, 빵/디저트 관련 단서가 없으면 → irrelevant 우선 후보
+        non_bakery_tokens = [
+            "라멘", "라면", "우동", "칼국수", "국밥", "곰탕", "설렁탕",
+            "고기", "삼겹살", "한우", "곱창", "막창", "닭갈비", "갈비",
+            "회", "초밥", "스시", "물회",
+            "족발", "보쌈", "찜닭", "닭발",
+            "치킨", "피자", "햄버거", "버거",
+            "파스타", "리조또", "스테이크",
+            "분식", "떡볶이", "순대", "튀김",
+            "술집", "포차", "호프", "바", "이자카야",
+            "맥주", "와인", "소주", "막걸리", "위스키",
+            "중식", "중국집", "마라탕", "훠궈", "짜장면", "짬뽕",
+            "한식", "일식", "양식", "식당", "맛집 투어",
+        ]
+
+        has_non_bakery_token = any(tok in q for tok in non_bakery_tokens)
+
+        # --------------------------------
+        # 1) 빵/디저트 관련 여부 판별
+        # --------------------------------
+        # 1-1) 코어 도메인 토큰
         core_bakery_tokens = [
             "빵", "빵집", "베이커리",
             "디저트", "카페",
             "케이크", "케익",
             "구움과자", "브레드",
+            "파티시에", "제과", "제빵",
         ]
 
         is_bakery_related = any(tok in q for tok in core_bakery_tokens)
 
-        # base_keywords.json 의 메뉴 키워드를 전부 스캔
-        # (예: 마들렌, 휘낭시에, 크로와상/크루아상, 까눌레, 팡도르, 에클레어 등)
+        # 1-2) base_keywords.json 의 메뉴 키워드 사용
         if not is_bakery_related and getattr(self, "menu_keywords_set", None):
             for mk in self.menu_keywords_set:
                 if not mk:
@@ -2004,24 +2124,52 @@ class BakeryExpertRAG:
                     is_bakery_related = True
                     break
 
-        # 영어권 키워드 (영문 질의용 – 최소만)
+        # 1-3) 영어권 빵/디저트 단어
         if not is_bakery_related:
             bakery_keywords_en = [
                 "bread", "bakery", "cake", "dessert",
                 "croissant", "baguette", "macaron",
                 "madeleine", "financier", "scone",
                 "tart", "pie", "cookie", "donut", "doughnut",
+                "eclair", "tigre", "cannele", "canele",
             ]
             if any(tok in q_lower for tok in bakery_keywords_en):
                 is_bakery_related = True
 
-        # 여기까지 했는데도 아무 관련 키워드가 없으면 → 이 챗봇의 도메인 밖
+        # 1-4) 맛집/추천 + '짧은 고유명사' 패턴 → 빵/디저트로 관대하게 인정
+        #      단, 명백한 non_bakery_tokens와 겹치면 제외
+        if not is_bakery_related and ("맛집" in q or "추천" in q):
+            import re
+
+            # 2~6 글자의 한글/영문 토큰 (지명, 메뉴명 포함)
+            raw_tokens = re.findall(r"[가-힣A-Za-z]{2,6}", q)
+            candidate_tokens = []
+            for t in raw_tokens:
+                # 지명/행정 단어는 스킵
+                if any(suffix in t for suffix in ["시", "구", "동", "읍", "면", "리", "역", "로", "길", "구청"]):
+                    continue
+                # 명백한 비-빵 토큰은 스킵
+                if t in non_bakery_tokens:
+                    continue
+                candidate_tokens.append(t)
+
+            # ex) "티그레 맛집 추천해줘" → ["티그레"]
+            if candidate_tokens and not has_non_bakery_token:
+                is_bakery_related = True
+
+        # 1-5) non_bakery_tokens 가 있고, 위 어떤 빵 단서도 없으면 → 도메인 밖
+        if not is_bakery_related and has_non_bakery_token:
+            return "irrelevant"
+
+        # 여기까지 왔는데도 여전히 빵 관련 단서가 없으면 → 이 챗봇 도메인 밖
         if not is_bakery_related:
             return "irrelevant"
 
-        # 2) 빵/디저트 관련으로 확정된 이후, "추천 vs 지식" 분리 -------------------
+        # --------------------------------
+        # 2) 빵/디저트 관련으로 확정된 이후: 추천 vs 지식
+        # --------------------------------
 
-        # (1) 추천/코스 의도
+        # 2-1) 추천/코스 의도
         recommend_keywords = [
             "추천해줘", "추천 해줘", "추천해 주세요", "추천해주세요",
             "맛집", "빵집 추천", "코스", "빵지순례",
@@ -2033,11 +2181,11 @@ class BakeryExpertRAG:
             if kw in q:
                 return "recommend"
 
-        # "추천"이라는 단어가 들어오면 기본적으로 추천 의도로 간주
+        # "추천" 이라는 말이 들어오면 기본적으로 추천으로 간주
         if "추천" in q:
             return "recommend"
 
-        # (2) 지식/이론 질문 의도
+        # 2-2) 지식/이론 질문 의도
         knowledge_keywords = [
             "어떤 종류", "종류가 있나요", "종류는", "종류 알려줘",
             "차이점", "차이가 뭐야", "차이가 뭔가요",
@@ -2050,13 +2198,14 @@ class BakeryExpertRAG:
             if kw in q:
                 return "knowledge"
 
-        # 물음표가 있으면서 '맛집/추천/코스'가 없으면 → 지식 질문일 가능성이 높다고 보고 knowledge
+        # 물음표가 있으면서 '맛집/추천/코스'가 없으면 → 지식질문일 가능성이 높다고 보고 knowledge
         if "?" in q and not any(k in q for k in ["맛집", "추천", "코스", "빵집 추천"]):
             return "knowledge"
 
-        # 3) 그 외는 기본적으로 "추천"으로 처리
+        # --------------------------------
+        # 3) 나머지는 기본적으로 '추천'으로 처리
+        # --------------------------------
         return "recommend"
-
 
     # ==============================
     #  인터랙티브 모드

@@ -88,11 +88,7 @@ li {
 }
 
 .ts-chat-body::-webkit-scrollbar-track {
-  background: linear-gradient(
-    to bottom,
-    #fffaf3,
-    #fffdf8
-  );
+  background: linear-gradient(to bottom, #fffaf3, #fffdf8);
   border-radius: 999px;
   margin: 6px 0;
 }
@@ -123,7 +119,6 @@ li {
     color.adjust($ts-border-brown, $lightness: -12%)
   );
 }
-
 
 .ts-chat-message {
   display: flex;
@@ -487,7 +482,7 @@ li {
    자세히 보기 / 접기 버튼
    =============================== */
 .details-toggle-button {
-  margin-top: 0.25rem;        /* 🔥 기존보다 더 위로 붙임 */
+  margin-top: 0.25rem; /* 🔥 기존보다 더 위로 붙임 */
   align-self: flex-start;
   background: white;
   border: 1px solid rgba($ts-border-brown, 0.8);
@@ -558,7 +553,7 @@ li {
 }
 
 .visit-plan-bakery-name {
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   color: $ts-text-brown;
   margin-bottom: 0.25rem;
@@ -602,7 +597,7 @@ li {
   border-radius: 1rem;
   background: #fffaf3;
   border: 2px solid rgba($ts-border-brown, 0.7);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
 }
 
 .bot-summary-title {
@@ -623,7 +618,7 @@ li {
 }
 
 .visit-plan-list {
-  margin-top: 0.6rem;       /* 카드와의 간격 통일 */
+  margin-top: 0.6rem; /* 카드와의 간격 통일 */
   padding: 0.9rem;
   border-radius: 1rem;
   background: #fffdf8;
@@ -633,7 +628,7 @@ li {
 .visit-plan-title {
   font-size: 0.92rem;
   font-weight: 800;
-  margin-bottom: 0.45rem;   /* 제목과 내용 간 간격 통일 */
+  margin-bottom: 0.45rem; /* 제목과 내용 간 간격 통일 */
 }
 
 .visit-plan-item {
@@ -641,7 +636,7 @@ li {
   border-radius: 0.9rem;
   background: white;
   border: 1px solid rgba($ts-border-brown, 0.18);
-  margin-bottom: 0.45rem;   /* 아이템 간 간격 균일화 */
+  margin-bottom: 0.45rem; /* 아이템 간 간격 균일화 */
 
   &:last-child {
     margin-bottom: 0;
@@ -657,6 +652,10 @@ li {
     display: flex;
     gap: 0.25rem;
   }
+}
+
+.bakery-plan-list li .plan-value {
+  font-size: 1rem;
 }
 
 /* ===============================
@@ -682,8 +681,8 @@ li {
 
 /* 아바타 공통 스타일 (고정 크기) */
 .ts-avatar {
-  width: 40px;   // 고정 가로
-  height: 40px;  // 고정 세로
+  width: 40px; // 고정 가로
+  height: 40px; // 고정 세로
   border-radius: 50%;
   border: 2px solid rgba($ts-border-brown, 0.9);
   background: $ts-bg-cream;

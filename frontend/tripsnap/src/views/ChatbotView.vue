@@ -79,9 +79,7 @@ onMounted(() => {
 // 0-1. 사용자 아바타 계산
 // ==========================
 const breadEmojis = ['🥐', '🥖', '🍞', '🥯', '🧁']
-const fallbackBreadEmoji = ref(
-  breadEmojis[Math.floor(Math.random() * breadEmojis.length)],
-)
+const fallbackBreadEmoji = ref(breadEmojis[Math.floor(Math.random() * breadEmojis.length)])
 
 const userAvatarUrl = computed(() => profileStore.profileImgUrl || '')
 
@@ -161,9 +159,7 @@ const parseBotTextSections = (text) => {
 
   // 코스 전체 소요 시간 요약 (⏱️ 부터 끝까지)
   const courseSummaryLines = []
-  const summaryStartIdx = lines.findIndex((l) =>
-    l.trim().startsWith('⏱️'),
-  )
+  const summaryStartIdx = lines.findIndex((l) => l.trim().startsWith('⏱️'))
   if (summaryStartIdx !== -1) {
     for (let i = summaryStartIdx; i < lines.length; i += 1) {
       const t = lines[i].trim()
@@ -394,8 +390,7 @@ const shareToPost = (results) => {
     .join('\n\n')
 
   prefilledPostContent.value =
-    `🍞 TripSnap 챗봇 추천 빵집\n\n${bakeryText}\n\n` +
-    `✨ AI가 추천해준 빵집들이에요!`
+    `🍞 TripSnap 챗봇 추천 빵집\n\n${bakeryText}\n\n` + `✨ AI가 추천해준 빵집들이에요!`
 
   showCreatePostModal.value = true
 }
@@ -413,9 +408,7 @@ const closeCreatePostModal = () => {
       <div class="ts-chat-header">
         <div class="ts-chat-header-main">
           <h2>TripSnap 챗봇</h2>
-          <p v-if="displayName">
-            {{ displayName }} 님을 위한 빵집 여행 도우미
-          </p>
+          <p v-if="displayName">{{ displayName }} 님을 위한 빵집 여행 도우미</p>
           <p v-else>로그인 후 맞춤 빵지순례 코스를 받아보세요.</p>
         </div>
       </div>
@@ -461,14 +454,9 @@ const closeCreatePostModal = () => {
                   class="bot-reco-wrapper"
                 >
                   <div class="bot-summary-card">
-                    <div class="bot-summary-title">
-                      ⏱️ 예상 소요 시간 요약
-                    </div>
+                    <div class="bot-summary-title">예상 소요 시간 요약</div>
                     <ul class="bot-summary-list">
-                      <li
-                        v-for="(line, sIdx) in getCourseSummaryLines(m)"
-                        :key="sIdx"
-                      >
+                      <li v-for="(line, sIdx) in getCourseSummaryLines(m)" :key="sIdx">
                         {{ line }}
                       </li>
                     </ul>
@@ -488,9 +476,7 @@ const closeCreatePostModal = () => {
                       v-if="isExpanded(m.id) && m.results && m.results.length"
                       class="visit-plan-list"
                     >
-                      <h3 class="visit-plan-title">
-                        ⏰ 방문 시간 계획(예상)
-                      </h3>
+                      <h3 class="visit-plan-title">방문 시간 계획(예상)</h3>
 
                       <div
                         v-for="(bakery, bIdx) in m.results"
@@ -503,19 +489,11 @@ const closeCreatePostModal = () => {
                         </div>
 
                         <ul
-                          v-if="
-                            getPlanRowsFor(m, bIdx) &&
-                            getPlanRowsFor(m, bIdx).length
-                          "
+                          v-if="getPlanRowsFor(m, bIdx) && getPlanRowsFor(m, bIdx).length"
                           class="bakery-plan-list"
                         >
-                          <li
-                            v-for="row in getPlanRowsFor(m, bIdx)"
-                            :key="row.label + row.value"
-                          >
-                            <span v-if="row.label" class="plan-label">
-                              - {{ row.label }}:
-                            </span>
+                          <li v-for="row in getPlanRowsFor(m, bIdx)" :key="row.label + row.value">
+                            <span v-if="row.label" class="plan-label"> - {{ row.label }}: </span>
                             <span class="plan-value">
                               {{ row.value }}
                             </span>
@@ -526,13 +504,8 @@ const closeCreatePostModal = () => {
                   </transition>
 
                   <!-- 빵집 버튼 리스트 -->
-                  <div
-                    v-if="m.results && m.results.length"
-                    class="bakery-list"
-                  >
-                    <div class="bakery-list-header">
-                      📍 추천 빵집 목록
-                    </div>
+                  <div v-if="m.results && m.results.length" class="bakery-list">
+                    <div class="bakery-list-header">📍 추천 빵집 목록</div>
 
                     <button
                       type="button"
@@ -557,36 +530,21 @@ const closeCreatePostModal = () => {
                         <div class="bakery-name">
                           {{ bakery.name || bakery.place_name || '이름 미상' }}
                           <span
-                            v-if="
-                              bakery.rate !== null &&
-                              bakery.rate !== undefined
-                            "
+                            v-if="bakery.rate !== null && bakery.rate !== undefined"
                             class="bakery-rating"
                           >
                             ⭐
                             {{
-                              typeof bakery.rate === 'number'
-                                ? bakery.rate.toFixed(1)
-                                : bakery.rate
+                              typeof bakery.rate === 'number' ? bakery.rate.toFixed(1) : bakery.rate
                             }}
                           </span>
                         </div>
 
-                        <div
-                          v-if="bakery.district || bakery.address"
-                          class="bakery-location"
-                        >
+                        <div v-if="bakery.district || bakery.address" class="bakery-location">
                           📍
-                          <span v-if="bakery.district">
-                            대전 {{ bakery.district }}
-                          </span>
-                          <span v-if="bakery.district && bakery.address">
-                            |
-                          </span>
-                          <span
-                            v-if="bakery.address"
-                            class="bakery-address"
-                          >
+                          <span v-if="bakery.district"> 대전 {{ bakery.district }} </span>
+                          <span v-if="bakery.district && bakery.address"> | </span>
+                          <span v-if="bakery.address" class="bakery-address">
                             {{ bakery.address }}
                           </span>
                         </div>
@@ -596,20 +554,15 @@ const closeCreatePostModal = () => {
                 </div>
 
                 <!-- 일반 응답 (설명형 텍스트 등) -->
-                <div
-                  v-else-if="m.text && m.text !== '__BAKERY_LIST__'"
-                  class="bot-text-only"
-                >
-                  🤖 {{ m.text }}
+                <div v-else-if="m.text && m.text !== '__BAKERY_LIST__'" class="bot-text-only">
+                  {{ m.text }}
                 </div>
               </div>
             </div>
           </div>
         </transition-group>
 
-        <div v-if="isLoading" class="ts-chat-loading">
-          🤖 생각 중...
-        </div>
+        <div v-if="isLoading" class="ts-chat-loading">🤖 생각 중...</div>
       </div>
 
       <div class="ts-chat-footer">
@@ -651,5 +604,4 @@ const closeCreatePostModal = () => {
 
 <style lang="scss" scoped>
 @import '@/assets/styles/chatbot/chatbot.scss';
-
 </style>

@@ -134,7 +134,7 @@ class BakeryLike(models.Model):
         Bakery,
         on_delete=models.CASCADE,
         related_name='likes',
-        verbose_name="빵집"
+        verbose_name="빵집" 
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="생성일")
 
