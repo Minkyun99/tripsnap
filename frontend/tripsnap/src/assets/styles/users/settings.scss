@@ -1,0 +1,174 @@
+@use 'sass:color';
+
+
+.ts-settings-page {
+  padding: 24px 0;
+}
+.ts-shell {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+.ts-card {
+  background: #fffdf8;
+  border: 2px solid #ffd09b;
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+  padding: 18px 16px;
+}
+.ts-settings-header {
+  margin-bottom: 14px;
+}
+.ts-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #8b4513;
+}
+.ts-subtitle {
+  margin: 6px 0 0;
+  color: #8b4513;
+  opacity: 0.75;
+  font-size: 13px;
+}
+.ts-block {
+  padding: 10px 4px;
+}
+.ts-block-title {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #8b4513;
+}
+.ts-muted {
+  margin: 0 0 10px;
+  font-size: 13px;
+  opacity: 0.8;
+  color: #6b3a14;
+}
+.ts-divider {
+  border: none;
+  border-top: 1px solid #f0d3a0;
+  margin: 14px 0;
+}
+.ts-radio-group {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+.ts-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b3a14;
+  font-weight: 700;
+}
+.ts-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ts-ok {
+  color: #0c7a43;
+  font-weight: 700;
+  font-size: 13px;
+}
+.ts-err {
+  color: #b00020;
+  font-weight: 700;
+  font-size: 13px;
+}
+.ts-alert {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.ts-alert--err {
+  background: #ffe6e6;
+  color: #b00020;
+}
+.ts-alert--ok {
+  background: #e9fff1;
+  color: #0c7a43;
+}
+.ts-form {
+  display: grid;
+  gap: 8px;
+  max-width: 520px;
+}
+.ts-label {
+  font-weight: 800;
+  color: #8b4513;
+  font-size: 13px;
+}
+.ts-input {
+  padding: 10px 10px;
+  border-radius: 10px;
+  border: 1px solid #d9b38c;
+  outline: none;
+  background: #fff;
+}
+.ts-input:focus {
+  border-color: #d2691e;
+  box-shadow: 0 0 0 1px rgba(210, 105, 30, 0.2);
+}
+.ts-btn {
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-weight: 800;
+  border: 1px solid #e2b892;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+}
+.ts-btn--pink {
+  background: #e89c5d;
+  color: #fff;
+  border-color: #dfa372;
+}
+.ts-btn--pink:hover {
+  background: #cd7b38;
+  border-color: #c07233;
+}
+.ts-btn--danger {
+  background: #c34646;
+  border-color: #c34646;
+  color: #fff;
+}
+.ts-btn--danger:hover {
+  background: #a83232;
+  border-color: #a83232;
+}
+.ts-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.ts-danger {
+  color: #b00020;
+}
+.ts-back-btn {
+  margin-bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #f0d3a0;
+  background: #fff7ea;
+  color: #8b4513;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+}
+.ts-back-btn:hover {
+  background: #ffe7c2;
+  border-color: #f0b878;
+  transform: translateY(-1px);
+}
+.ts-back-icon {
+  font-size: 14px;
+}
+.ts-back-label {
+  line-height: 1;
+}

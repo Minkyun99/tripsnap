@@ -27,7 +27,7 @@ function prevSlide() {
 }
 
 function nextSlide() {
-  if (currentIndex.value < (post.value.images?.length || 0) - 1) {
+  if (currentIndex.value < (post.value?.images?.length || 0) - 1) {
     currentIndex.value++
   }
 }
@@ -36,7 +36,7 @@ onMounted(async () => {
   await ps.loadMyProfile()
 })
 
-// ✅ (추가) 페이지를 떠날 때 follow 모달이 다른 페이지에 “남아있지 않도록” 정리
+// 페이지를 떠날 때 follow 모달이 다른 페이지에 남아있지 않도록 정리
 onBeforeUnmount(() => {
   ps.closeFollowModal()
 })
@@ -54,10 +54,42 @@ function openPostModal(post) {
   ps.openPostModal(post)
 }
 
-// ✅ (수정) 템플릿에서 멀티라인 @click 제거용
 function goProfileFromFollow(nickname) {
   ps.closeFollowModal()
   router.push({ name: 'profile-detail', params: { nickname } }).catch(() => {})
+}
+
+// File -> base64 데이터 URL 변환 유틸
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      if (typeof e.target?.result === 'string') resolve(e.target.result)
+      else reject(new Error('파일을 읽을 수 없습니다.'))
+    }
+    reader.onerror = () => reject(new Error('파일 읽기 중 오류가 발생했습니다.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+// ✅ 프로필 이미지 모달에서 업로드/삭제 완료 시 호출되는 핸들러
+async function handleProfileImageUploaded(file) {
+  try {
+    // null → 기존 이미지 삭제
+    if (!file) {
+      await ps.resetProfileImage()
+      ps.closeImageModal()
+      return
+    }
+
+    // 파일 → base64 업로드
+    const base64 = await fileToDataUrl(file)
+    await ps.uploadProfileImageBase64(base64)
+
+    ps.closeImageModal()
+  } catch (e) {
+    alert(e?.message || '프로필 이미지를 업데이트하는 중 오류가 발생했습니다.')
+  }
 }
 </script>
 
@@ -72,6 +104,7 @@ function goProfileFromFollow(nickname) {
 
           <div class="ts-avatar-wrap">
             <div class="ts-avatar-core" role="button" @click="ps.openImageModal()">
+              <!-- ✅ 여기에서도 profileImgUrl 사용 -->
               <img v-if="ps.profileImgUrl" :src="ps.profileImgUrl" alt="profile" />
               <div v-else class="ts-avatar-placeholder">🍞</div>
             </div>
@@ -159,7 +192,6 @@ function goProfileFromFollow(nickname) {
             </div>
 
             <div style="flex: 1">
-              <!-- ✅ (수정) 멀티라인 @click 제거 -->
               <div class="ts-mini-name" @click="goProfileFromFollow(u.nickname)">
                 {{ u.nickname }}
               </div>
@@ -167,7 +199,6 @@ function goProfileFromFollow(nickname) {
             </div>
           </div>
 
-          <!-- ✅ (추가) 비공개 문구 -->
           <p v-if="ps.followListPrivateMessage" class="ts-muted">
             {{ ps.followListPrivateMessage }}
           </p>
@@ -178,7 +209,13 @@ function goProfileFromFollow(nickname) {
     </div>
 
     <!-- 모달들 -->
-    <ProfileImageModal v-if="ps.imageModalOpen" @close="ps.closeImageModal()" />
+    <ProfileImageModal
+      v-if="ps.imageModalOpen"
+      :current-url="ps.profileImgUrl"
+      @close="ps.closeImageModal()"
+      @uploaded="handleProfileImageUploaded"
+    />
+
     <CreatePostModal v-if="ps.createPostModalOpen" @close="ps.closeCreatePostModal()" />
     <PostModal v-if="ps.postModalOpen" @close="ps.closePostModal()" />
   </main>

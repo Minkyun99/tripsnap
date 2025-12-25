@@ -6,7 +6,7 @@
    =================================== */
 
 .ts-modal {
-  max-width: 1000px;   /* 모달 살짝 크게 */
+  max-width: 1000px; /* 모달 살짝 크게 */
   width: 92vw;
   // min-height: 520px;
   padding: 10px;
@@ -14,9 +14,9 @@
 
 /* 좌우 2열 레이아웃 */
 .ts-modal-grid {
-  align-items: stretch;  /* 좌우 컬럼 모두 그리드 높이 채움 */
+  align-items: stretch; /* 좌우 컬럼 모두 그리드 높이 채움 */
   column-gap: 1.5rem;
-  height: 100%;          /* ✅ 모달 내부 높이를 100% 채움 */
+  height: 100%; /* ✅ 모달 내부 높이를 100% 채움 */
 }
 
 /* ===================================
@@ -27,13 +27,13 @@
 
 .ts-modal-media {
   width: 100%;
-  height: 100%;          /* ✅ 모달 그리드 높이와 동일 */
+  height: 100%; /* ✅ 모달 그리드 높이와 동일 */
   min-height: 100%;
-  background: #000;      /* 위·아래/좌·우 검정 배경 */
+  background: #000; /* 위·아래/좌·우 검정 배경 */
   border-radius: 1rem;
   overflow: hidden;
   display: flex;
-  align-items: center;   /* 내부 컨텐츠(슬라이더)를 세로 중앙 */
+  align-items: center; /* 내부 컨텐츠(슬라이더)를 세로 중앙 */
   justify-content: center; /* 가로 중앙 */
 }
 
@@ -46,7 +46,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 100%;          /* 부모(.ts-modal-media)를 꽉 채움 */
+  height: 100%; /* 부모(.ts-modal-media)를 꽉 채움 */
 }
 
 .ts-slider-track {
@@ -61,15 +61,15 @@
   min-width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;      /* 이미지 세로 가운데 */
-  justify-content: center;  /* 이미지 가로 가운데 */
+  align-items: center; /* 이미지 세로 가운데 */
+  justify-content: center; /* 이미지 가로 가운데 */
   background: #000;
 }
 
 /* ✅ 이미지를 비율 유지하면서 박스를 꽉 채우도록 (일부 잘릴 수 있음) */
 .ts-slide img {
   width: 100%;
-  height: 100%;
+  height: 520px;
   object-fit: cover;
   display: block;
 }
@@ -141,7 +141,7 @@
   white-space: pre-wrap;
   line-height: 1.6;
   margin: 0 0 0.35rem;
-  max-height: 8rem;       /* 내용에 따라 이 선까지 커짐 */
+  max-height: 8rem; /* 내용에 따라 이 선까지 커짐 */
   overflow: hidden;
 }
 

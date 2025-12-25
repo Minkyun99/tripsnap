@@ -7,6 +7,10 @@ $ts-bg-cream: #fffaf0;
 /* ✅ 새로 추가: 포인트 컬러 */
 $ts-accent-pink: #ff6b9d;
 
+li {
+  list-style-type: none;
+}
+
 .ts-chat-page {
   width: 100%;
   min-height: calc(90vh - 4rem);
@@ -14,7 +18,7 @@ $ts-accent-pink: #ff6b9d;
   align-items: flex-start;
   justify-content: center;
   padding: 1.5rem 1rem;
-  background: radial-gradient(circle at top, #fff7eb 0, #fff 45%, #fdf7f3 100%);
+  // background: radial-gradient(circle at top, #fff7eb 0, #fff 45%, #fdf7f3 100%);
 }
 
 .ts-chat-wrapper {

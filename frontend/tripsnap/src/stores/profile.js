@@ -21,6 +21,15 @@ export const useProfileStore = defineStore('profile', {
       is_following: false,
     },
 
+    searchUserResults: [],
+    searchBakeryResults: [],
+
+    myProfile: {
+      nickname: '',
+      username: '',
+      profile_img: '',
+    },
+
     posts: [],
 
     // 모달 상태
@@ -48,6 +57,7 @@ export const useProfileStore = defineStore('profile', {
     nickname: (s) => s.profile?.nickname || '',
     username: (s) => s.profile?.username || '',
     profileImgUrl: (s) => s.profile?.profile_img || '',
+    myProfileImgUrl: (s) => s.myProfile?.profile_img || '',
     followerCount: (s) => s.profile?.follower_count ?? 0,
     followingCount: (s) => s.profile?.following_count ?? 0,
     isOwner: (s) => !!s.profile?.is_owner,
@@ -62,6 +72,14 @@ export const useProfileStore = defineStore('profile', {
       // payload = { profile: {...}, posts: [...] }
       this.profile = payload.profile || this.profile
       this.posts = Array.isArray(payload.posts) ? payload.posts : []
+    },
+
+    _setMyProfilePayload(payload) {
+      if (!payload || !payload.profile) return
+      this.myProfile = {
+        ...(this.myProfile || {}),
+        ...payload.profile,
+      }
     },
 
     _updatePostInList(updated) {
@@ -90,7 +108,10 @@ export const useProfileStore = defineStore('profile', {
       this.error = null
       try {
         const data = await apiJson('/users/api/profile/me/')
+        // 화면에 “내 프로필 상세 페이지”를 띄울 때 쓰는 profile
         this._setProfilePayload(data)
+        // ✅ 헤더/배너에서 항상 고정으로 사용할 myProfile
+        this._setMyProfilePayload(data)
       } catch (e) {
         this.error = e.message
         throw e
@@ -104,7 +125,9 @@ export const useProfileStore = defineStore('profile', {
       this.error = null
       try {
         const data = await apiJson(`/users/api/profile/${encodeURIComponent(nickname)}/`)
+        // ✅ 여기서는 현재 화면용 profile / posts만 교체
         this._setProfilePayload(data)
+        // this._setMyProfilePayload(...) 는 호출하지 않음
       } catch (e) {
         this.error = e.message
         throw e
@@ -288,22 +311,51 @@ export const useProfileStore = defineStore('profile', {
      * 게시글 수정
      * - PostModal.vue: updatePost(postId, title, content)
      */
-    async updatePost(postId, title, content) {
-      // 기존 게시글 찾기 (목록 → 없으면 activePost)
+    // src/stores/profile.js
+
+    async updatePost(postId, titleOrPayload, contentMaybe) {
+      // ① 기존 게시글 찾기
       const existing = this.posts.find((p) => p.id === postId) || this.activePost
 
-      const finalTitle = (title !== undefined && title !== null
-        ? String(title)
-        : existing?.title || ''
+      // ② 인자 형태 구분
+      // - updatePost(id, { title, content, images })
+      // - updatePost(id, title, content)  둘 다 지원
+      let title
+      let content
+      let images
+
+      if (titleOrPayload && typeof titleOrPayload === 'object' && !Array.isArray(titleOrPayload)) {
+        // 새 형태: payload 객체
+        title = titleOrPayload.title
+        content = titleOrPayload.content
+        images = titleOrPayload.images
+      } else {
+        // 옛 형태: (id, title, content)
+        title = titleOrPayload
+        content = contentMaybe
+      }
+
+      const finalTitle = (
+        title !== undefined && title !== null ? String(title) : existing?.title || ''
       ).trim()
 
-      const finalContent = (content !== undefined && content !== null
-        ? String(content)
-        : existing?.content || ''
+      const finalContent = (
+        content !== undefined && content !== null ? String(content) : existing?.content || ''
       ).trim()
 
       if (!finalTitle) {
         throw new Error('제목을 입력하세요.')
+      }
+
+      // ③ 요청 body 구성
+      const body = {
+        title: finalTitle,
+        content: finalContent,
+      }
+
+      // images 배열이 넘어온 경우에만 포함
+      if (Array.isArray(images)) {
+        body.images = images
       }
 
       const res = await apiFetch(`/users/post/${postId}/update/ajax/`, {
@@ -313,10 +365,7 @@ export const useProfileStore = defineStore('profile', {
           'X-CSRFToken': getCsrfToken(),
           'X-Requested-With': 'XMLHttpRequest',
         },
-        body: JSON.stringify({
-          title: finalTitle,
-          content: finalContent,
-        }),
+        body: JSON.stringify(body),
       })
 
       const data = await res.json().catch(() => null)
@@ -325,10 +374,12 @@ export const useProfileStore = defineStore('profile', {
         throw new Error(data?.error || '게시글 수정에 실패했습니다.')
       }
 
-      const updated = {
+      // ④ 백엔드가 serializer로 내려준 전체 post 를 그대로 반영
+      //    (image / images / like_count / is_liked / created_at 등 모두)
+      const updated = data.post || {
         id: postId,
-        title: data.post?.title ?? finalTitle,
-        content: data.post?.content ?? finalContent,
+        title: finalTitle,
+        content: finalContent,
       }
 
       this._updatePostInList(updated)
@@ -484,10 +535,48 @@ export const useProfileStore = defineStore('profile', {
       })
       if (!data.success) throw new Error(data.error || '프로필 이미지 업로드 실패')
 
-      this.profile.profile_img = `${data.image_url}?t=${Date.now()}`
+      const urlWithTs = `${data.image_url}?t=${Date.now()}`
+
+      // 🔴 기존: this.profile.profile_img 만 변경
+      // this.profile.profile_img = `${data.image_url}?t=${Date.now()}`
+
+      // ✅ 수정: profile + myProfile 둘 다 갱신
+      this.profile = {
+        ...this.profile,
+        profile_img: urlWithTs,
+      }
+      this.myProfile = {
+        ...this.myProfile,
+        profile_img: urlWithTs,
+      }
+
       return data.image_url
     },
 
+    // ✅ 프로필 이미지 기본값으로 초기화
+    async resetProfileImage() {
+      const data = await apiJson('/users/reset-profile-image/', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+
+      if (!data.success) {
+        throw new Error(data.error || '프로필 이미지를 기본값으로 되돌리는 데 실패했습니다.')
+      }
+
+      // 🔴 기존: this.profile.profile_img = ''
+      // ✅ 수정: 두 곳 다 비워서 아바타/모달 모두 기본 이미지로
+      this.profile = {
+        ...this.profile,
+        profile_img: '',
+      }
+      this.myProfile = {
+        ...this.myProfile,
+        profile_img: '',
+      }
+
+      return true
+    },
     // =====================================================
     // 팔로워/팔로잉 모달
     // =====================================================
@@ -539,7 +628,6 @@ export const useProfileStore = defineStore('profile', {
       this.followListPrivateMessage = ''
     },
 
-
     resetProfile() {
       this.profile = {
         nickname: '',
@@ -558,7 +646,29 @@ export const useProfileStore = defineStore('profile', {
       // this.followModalOpen = false
       // this.followList = []
       // this.followListPrivateMessage = ''
-    }
+    },
 
+    async searchUsersAndBakeries(query) {
+      const q = (query || '').trim()
+      if (!q) {
+        this.searchUserResults = []
+        this.searchBakeryResults = []
+        return { users: [], bakeries: [] }
+      }
+
+      const res = await apiFetch(`/users/api/search/profile-bakery/?q=${encodeURIComponent(q)}`)
+      const data = await res.json().catch(() => ({ users: [], bakeries: [] }))
+
+      if (!res.ok) {
+        // 필요시 에러 처리
+        this.searchUserResults = []
+        this.searchBakeryResults = []
+        throw new Error(data.detail || '검색 중 오류가 발생했습니다.')
+      }
+
+      this.searchUserResults = data.users || []
+      this.searchBakeryResults = data.bakeries || []
+      return data
+    },
   },
 })

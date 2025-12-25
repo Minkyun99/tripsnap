@@ -14,7 +14,8 @@ from dj_rest_auth.serializers import LoginSerializer
 from dj_rest_auth.registration.serializers import RegisterSerializer
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Post, PostImage
+from .models import Post, PostImage, Profile
+from chatbot.models import Bakery
 
 User = get_user_model()
 
@@ -198,3 +199,26 @@ class PostSerializer(serializers.ModelSerializer):
             'id', 'writer_nickname', 'writer_username', 'title', 'content', 
             'image', 'images', 'like_count', 'is_liked', 'created_at'
         ]
+
+
+class ProfileSearchSerializer(serializers.ModelSerializer):
+    nickname = serializers.CharField(source='user.nickname', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    profile_img = serializers.ImageField(read_only=True)
+
+    class Meta:
+        model = Profile
+        fields = ('nickname', 'username', 'profile_img')
+
+
+# (선택 1) 검색 전용 BakerySearchSerializer를 users 쪽에 새로 정의
+class BakerySearchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bakery
+        fields = (
+            'id',
+            'name',
+            'district',
+            'road_address',
+            'rate',
+        )

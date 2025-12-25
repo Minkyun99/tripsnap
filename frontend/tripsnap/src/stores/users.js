@@ -153,36 +153,41 @@ export const useUserStore = defineStore('user', {
       }
     },
 
-    async fetchMe() {
+     async fetchMe() {
       this.isLoading = true
-      this.error = null
+      // 여기서는 error를 건드리지 않는 게 부드럽습니다.
 
       try {
-        const res = await fetch(`${API_BASE}/api/auth/user/`, {
+        const res = await fetch(`${API_BASE}/users/api/me/`, {
           credentials: 'include',
         })
 
-        if (res.status === 401 || res.status === 403) {
+        if (!res.ok) {
+          const msg = await parseErrorMessage(res, '유저 정보를 가져오는 중 오류가 발생했습니다.')
+          console.warn('fetchMe non-ok:', msg)
           this.user = null
           return null
         }
 
-        if (!res.ok) {
-          const msg = await parseErrorMessage(res, '유저 정보를 가져오는 중 오류가 발생했습니다.')
-          throw new Error(msg)
+        const data = await res.json()
+
+        if (data.is_authenticated) {
+          this.user = data.user
+        } else {
+          this.user = null
         }
 
-        const data = await res.json()
-        this.user = data
-        return data
+        return this.user
       } catch (err) {
+        console.warn('fetchMe error:', err)
         this.user = null
-        this.error = err?.message ?? '유저 정보를 가져오는 중 오류가 발생했습니다.'
         return null
       } finally {
         this.isLoading = false
       }
     },
+
+
 
     async changePassword({ old_password, new_password1, new_password2 }) {
       this.isLoading = true

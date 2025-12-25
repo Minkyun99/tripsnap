@@ -4,6 +4,8 @@ import base64
 import json
 import random
 import uuid
+import traceback
+import logging
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, logout
@@ -13,8 +15,14 @@ from django.contrib.auth import update_session_auth_hash
 from django.core.files.base import ContentFile
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+
+from django.views.decorators.http import require_GET
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST, require_http_methods
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+
 from django.db.models import Q
 
 from allauth.socialaccount.models import SocialAccount
@@ -22,7 +30,12 @@ from allauth.socialaccount.models import SocialAccount
 from .forms import CustomUserCreationForm
 from .models import Profile, Post, PostImage, Like, Comment, Social
 from chatbot.models import Bakery
-from .serializers import PostSerializer
+from .serializers import PostSerializer, ProfileSearchSerializer, BakerySearchSerializer
+
+from django.core.management import call_command
+from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -86,6 +99,32 @@ def _can_view_follow_list(viewer: User, owner: User) -> bool:
 
     # following_only
     return (viewer == owner) or Social.objects.filter(follower=owner, following=viewer).exists()
+
+
+@require_GET
+def current_user_or_guest(request):
+    """
+    로그인되어 있으면 사용자 정보 + is_authenticated=True
+    비로그인이어도 200 OK + is_authenticated=False 를 내려주는 엔드포인트
+    """
+    if request.user.is_authenticated:
+        u = request.user
+        data = {
+            "is_authenticated": True,
+            "user": {
+                "id": u.id,
+                "email": u.email,
+                "username": getattr(u, "username", "") or "",
+                "nickname": getattr(u, "nickname", "") or "",
+            },
+        }
+    else:
+        data = {
+            "is_authenticated": False,
+            "user": None,
+        }
+
+    return JsonResponse(data)
 
 
 def _profile_payload(request, target_user: User):
@@ -542,6 +581,32 @@ def upload_profile_image(request):
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
+@login_required
+@require_http_methods(["POST"])
+def reset_profile_image(request):
+    """
+    POST /users/reset-profile-image/
+    - 현재 유저의 profile_img를 삭제하고 기본 프로필 상태로 되돌립니다.
+    """
+    try:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        # 기존 프로필 이미지 파일 삭제
+        if profile.profile_img:
+            profile.profile_img.delete(save=False)
+            profile.profile_img = None
+            profile.save(update_fields=["profile_img"])
+
+        return JsonResponse(
+            {
+                "success": True,
+                "image_url": None,
+                "message": "프로필 이미지가 기본 이미지로 설정되었습니다.",
+            }
+        )
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
 # =========================================================
 # Posts
 # =========================================================
@@ -602,12 +667,19 @@ def post_create(request):
     except Exception as e:
         return JsonResponse({"error": f"서버 오류: {str(e)}"}, status=500)
 
+# users/views.py
+
 @login_required
 @require_POST
 def post_update_ajax(request, post_id):
     """
     POST /users/post/<post_id>/update/ajax/
-    JSON: {title, content}
+    JSON: {
+      "title": "...",
+      "content": "...",
+      # 선택: 이미지들을 base64 배열로 넘길 수 있음
+      # "images": ["data:image/png;base64,....", ...]
+    }
     """
     post = get_object_or_404(Post, id=post_id, writer=request.user)
 
@@ -618,15 +690,68 @@ def post_update_ajax(request, post_id):
 
     title = (body.get("title") or "").strip()
     content = (body.get("content") or "").strip()
+    images = body.get("images", None)  # 없으면 None, 있으면 배열 기대
 
     if not title:
         return JsonResponse({"success": False, "error": "제목을 입력하세요."}, status=400)
 
+    # 1) 기본 텍스트 수정
     post.title = title
     post.content = content
-    post.save(update_fields=["title", "content"])
 
-    return JsonResponse({"success": True, "post": {"id": post.id, "title": post.title, "content": post.content}})
+    # 2) images 키가 온 경우에만 "이미지 재구성" 수행
+    #    - images 가 None 이면: 기존 이미지 유지
+    #    - images 가 [] 이면: 대표이미지 + PostImage 모두 삭제
+    #    - images 가 [base64, ...] 이면: 전부 교체
+    if images is not None:
+        # 기존 이미지 전부 삭제
+        PostImage.objects.filter(post=post).delete()
+        post.share_trip = None  # 대표 이미지 초기화
+
+        # 새 이미지 배열이 비어있지 않은 경우에만 재생성
+        if isinstance(images, list) and len(images) > 0:
+            for idx, base64_str in enumerate(images):
+                if not base64_str or not isinstance(base64_str, str):
+                    continue
+
+                try:
+                    header, encoded = base64_str.split(";base64,")
+                except ValueError:
+                    # 형식이 이상하면 건너뜀
+                    continue
+
+                ext = header.split("/")[-1] or "jpg"
+
+                image_file = ContentFile(
+                    base64.b64decode(encoded),
+                    name=f"post_{post.id}_{idx}_{uuid.uuid4()}.{ext}",
+                )
+
+                # 첫 번째 이미지를 대표 이미지(share_trip)로 사용
+                if idx == 0:
+                    post.share_trip = image_file
+
+                # 모든 이미지를 PostImage에 저장
+                PostImage.objects.create(
+                    post=post,
+                    image=image_file,
+                )
+
+    # 텍스트 + (있다면) 대표 이미지까지 한 번에 저장
+    if images is not None:
+        post.save()
+    else:
+        post.save(update_fields=["title", "content"])
+
+    # 최신 상태를 serializer로 내려줌 (image / images 포함)
+    serializer = PostSerializer(post, context={"request": request})
+
+    return JsonResponse(
+        {
+            "success": True,
+            "post": serializer.data,
+        }
+    )
 
 
 @login_required
@@ -946,3 +1071,122 @@ def recommended_bakeries_api(request):
 
     return JsonResponse({"results": results})
 
+
+@login_required
+@require_http_methods(["POST"])
+def build_user_keywords_api(request):
+    """
+    POST /users/api/settings/build-user-keywords/
+    관리자(tripsnap@tripsnap.com)만 호출 가능.
+    """
+    # ✅ 관리자 체크
+    if request.user.email != "tripsnap@tripsnap.com":
+        return JsonResponse(
+            {"success": False, "detail": "권한이 없습니다."},
+            status=403,
+        )
+
+    # ✅ (선택) limit 옵션을 JSON body 로 받을 수 있게 처리
+    limit = None
+    try:
+      if request.body:
+          payload = json.loads(request.body.decode("utf-8"))
+          limit = payload.get("limit")
+    except Exception:
+        # body 파싱 실패해도 limit 없이 그냥 진행
+        pass
+
+    try:
+        cmd_kwargs = {}
+        if limit is not None:
+            cmd_kwargs["limit"] = int(limit)
+
+        # 🔥 여기서 management command 실행
+        call_command("build_user_keywords", **cmd_kwargs)
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        logger.error("build_user_keywords command failed: %s\n%s", e, tb)
+
+        # ✅ 프론트에서 디버깅할 수 있도록 에러 메시지와 트레이스백을 내려줌
+        return JsonResponse(
+            {
+                "success": False,
+                "detail": f"키워드 추출 중 오류가 발생했습니다: {e}",
+                "traceback": tb,
+            },
+            status=500,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "detail": "사용자 키워드 추출 작업이 정상적으로 실행되었습니다.",
+            "ran_at": timezone.now().isoformat(),
+        }
+    )
+
+
+@login_required
+@require_GET
+def profile_bakery_search(request):
+    """
+    GET /users/api/search/profile-bakery/?q=검색어
+
+    응답 예시:
+    {
+      "users": [
+        {"nickname": "...", "username": "...", "profile_img": "http://..."},
+        ...
+      ],
+      "bakeries": [
+        {"id": 1, "name": "...", "district": "...", "road_address": "...", "rate": 4.5},
+        ...
+      ]
+    }
+    """
+    q = (request.GET.get("q") or "").strip()
+    if not q:
+        return JsonResponse({"users": [], "bakeries": []})
+
+    # 1) 유저 프로필 검색
+    profile_qs = (
+        Profile.objects
+        .select_related("user")
+        .filter(
+            Q(user__nickname__icontains=q)
+            | Q(user__email__icontains=q)
+            | Q(user__username__icontains=q)
+        )
+        .order_by("user__id")[:10]
+    )
+
+    users_data = ProfileSearchSerializer(
+        profile_qs,
+        many=True,
+        context={"request": request},
+    ).data
+
+    # 2) 빵집 검색
+    bakery_qs = (
+        Bakery.objects.filter(
+            Q(name__icontains=q)
+            | Q(district__icontains=q)
+            | Q(road_address__icontains=q)
+            | Q(jibun_address__icontains=q)
+        )
+        .order_by("id")[:10]
+    )
+
+    bakeries_data = BakerySearchSerializer(
+        bakery_qs,
+        many=True,
+        context={"request": request},
+    ).data
+
+    return JsonResponse(
+        {
+            "users": users_data,
+            "bakeries": bakeries_data,
+        }
+    )

@@ -10,10 +10,12 @@ urlpatterns = [
 
     # ✅ 설정 페이지
     path('settings/', views.settings_view, name='settings'),
+    path("api/me/", views.current_user_or_guest, name="current_user_or_guest"),
     
     # ===== 프로필 =====
     path('profile/', views.user_profile, name='user_profile'),
     path("api/profile/search/", views.profile_search, name="profile-search"), 
+    path('api/search/profile-bakery/', views.profile_bakery_search, name='profile-bakery-search'),
     path('profile/<str:nickname>/', views.user_profile, name='profile_detail'),
 
     # ===== 팔로우 =====
@@ -35,6 +37,7 @@ urlpatterns = [
     path('signup/', views.signup, name='signup'),
     path('delete/', views.account_delete, name='account_delete'),
     path('upload-profile-image/', views.upload_profile_image, name='upload_profile_image'),
+    path('reset-profile-image/', views.reset_profile_image, name='reset_profile_image'), 
 
     # ===== 게시글 =====
     path('post/create/', views.post_create, name='post_create'),
@@ -66,5 +69,11 @@ urlpatterns = [
    # ✅ 추천 빵집 API (HomeView.vue에서 사용)
     path('api/recommended-bakeries/', views.recommended_bakeries_api, name='recommended_bakeries_api'),
 
+    # 설정 화면에서 키워드 빌드 트리거
+    path(
+        "api/settings/build-user-keywords/",
+        views.build_user_keywords_api,
+        name="build_user_keywords_api",
+    ),
 
 ]

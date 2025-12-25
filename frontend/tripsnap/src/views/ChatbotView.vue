@@ -246,6 +246,7 @@ const getPlanRowsFor = (msg, index) => {
   if (!sec || !sec.planRows) return []
 
   const allowedLabels = [
+    '이전 매장에서 이동',
     '예상 도착 시각',
     '줄 서는 시간',
     '매장 내 머무는 시간',
