@@ -52,7 +52,14 @@ const displayInitial = computed(() => {
 })
 
 // 프로필 이미지 URL (없으면 빈 문자열)
-const profileImageUrl = computed(() => profileStore.myProfileImgUrl || '')
+const profileImageUrl = computed(() => {
+  // 내 프로필 페이지에서 수정 직후에는 여기 값이 가장 먼저 바뀝니다.
+  if (profileStore.isOwner && profileStore.profileImgUrl) {
+    return profileStore.profileImgUrl
+  }
+  // 다른 사람 프로필을 보고 있을 때는 항상 "내" 프로필 이미지로 고정
+  return profileStore.myProfileImgUrl || ''
+})
 
 const closeMenu = () => {
   isMenuOpen.value = false
@@ -70,8 +77,8 @@ const openMenuAtAvatar = async () => {
 
   // 아바타 가로 중앙 아래쪽 기준
   menuPosition.value = {
-    top: rect.bottom + 8,                        // 아바타 아래로 8px 띄우기
-    left: rect.left + rect.width / 2,           // 아바타 중앙 x 좌표
+    top: rect.bottom + 8, // 아바타 아래로 8px 띄우기
+    left: rect.left + rect.width / 2, // 아바타 중앙 x 좌표
   }
 
   isMenuOpen.value = true
@@ -172,36 +179,20 @@ const handleLogout = async () => {
             >
               <span class="ts-profile-avatar">
                 <!-- 프로필 이미지가 있으면 이미지 사용 -->
-                <img
-                  v-if="profileImageUrl"
-                  :src="profileImageUrl"
-                  alt="프로필 이미지"
-                />
+                <img v-if="profileImageUrl" :src="profileImageUrl" alt="프로필 이미지" />
                 <!-- 없으면 이니셜 -->
-                <span
-                  v-else-if="displayInitial"
-                  class="ts-profile-initial"
-                >
+                <span v-else-if="displayInitial" class="ts-profile-initial">
                   {{ displayInitial }}
                 </span>
                 <!-- 이니셜도 없으면 기본 이모지 -->
-                <span
-                  v-else
-                  class="ts-profile-emoji"
-                >
-                  🍞
-                </span>
+                <span v-else class="ts-profile-emoji"> 🍞 </span>
               </span>
             </button>
           </div>
 
           <!-- 드롭다운 메뉴 (Teleport → body) -->
           <Teleport to="body">
-            <div
-              v-if="isMenuOpen"
-              class="ts-profile-menu-layer"
-              @click.self="closeMenu"
-            >
+            <div v-if="isMenuOpen" class="ts-profile-menu-layer" @click.self="closeMenu">
               <div
                 class="ts-profile-menu pixel-corners"
                 :style="{
@@ -209,11 +200,7 @@ const handleLogout = async () => {
                   left: menuPosition.left + 'px',
                 }"
               >
-                <button
-                  type="button"
-                  class="ts-profile-menu__item"
-                  @click="goProfile"
-                >
+                <button type="button" class="ts-profile-menu__item" @click="goProfile">
                   내 프로필
                 </button>
                 <button
@@ -230,20 +217,8 @@ const handleLogout = async () => {
 
         <!-- 비로그인 상태 -->
         <template v-else>
-          <button
-            type="button"
-            class="ts-btn pixel-corners"
-            @click="goLogin"
-          >
-            로그인
-          </button>
-          <button
-            type="button"
-            class="ts-btn pixel-corners"
-            @click="goSignup"
-          >
-            회원가입
-          </button>
+          <button type="button" class="ts-btn pixel-corners" @click="goLogin">로그인</button>
+          <button type="button" class="ts-btn pixel-corners" @click="goSignup">회원가입</button>
         </template>
       </div>
     </div>

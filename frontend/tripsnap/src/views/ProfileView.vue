@@ -36,6 +36,7 @@ onMounted(async () => {
   await ps.loadMyProfile()
 })
 
+// 페이지를 떠날 때 follow 모달이 다른 페이지에 남아있지 않도록 정리
 onBeforeUnmount(() => {
   ps.closeFollowModal()
 })
@@ -58,7 +59,7 @@ function goProfileFromFollow(nickname) {
   router.push({ name: 'profile-detail', params: { nickname } }).catch(() => {})
 }
 
-// File → base64 data URL 변환
+// File -> base64 데이터 URL 변환 유틸
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -71,17 +72,17 @@ function fileToDataUrl(file) {
   })
 }
 
-// ✅ 프로필 이미지 업로드/삭제 처리
+// ✅ 프로필 이미지 모달에서 업로드/삭제 완료 시 호출되는 핸들러
 async function handleProfileImageUploaded(file) {
   try {
-    // 1) null → 기존 이미지 삭제 (기본 프로필로 전환)
+    // null → 기존 이미지 삭제
     if (!file) {
       await ps.resetProfileImage()
       ps.closeImageModal()
       return
     }
 
-    // 2) 새 이미지 파일 업로드
+    // 파일 → base64 업로드
     const base64 = await fileToDataUrl(file)
     await ps.uploadProfileImageBase64(base64)
 
@@ -103,6 +104,7 @@ async function handleProfileImageUploaded(file) {
 
           <div class="ts-avatar-wrap">
             <div class="ts-avatar-core" role="button" @click="ps.openImageModal()">
+              <!-- ✅ 여기에서도 profileImgUrl 사용 -->
               <img v-if="ps.profileImgUrl" :src="ps.profileImgUrl" alt="profile" />
               <div v-else class="ts-avatar-placeholder">🍞</div>
             </div>
@@ -213,6 +215,7 @@ async function handleProfileImageUploaded(file) {
       @close="ps.closeImageModal()"
       @uploaded="handleProfileImageUploaded"
     />
+
     <CreatePostModal v-if="ps.createPostModalOpen" @close="ps.closeCreatePostModal()" />
     <PostModal v-if="ps.postModalOpen" @close="ps.closePostModal()" />
   </main>

@@ -15,6 +15,7 @@ urlpatterns = [
     # ===== 프로필 =====
     path('profile/', views.user_profile, name='user_profile'),
     path("api/profile/search/", views.profile_search, name="profile-search"), 
+    path('api/search/profile-bakery/', views.profile_bakery_search, name='profile-bakery-search'),
     path('profile/<str:nickname>/', views.user_profile, name='profile_detail'),
 
     # ===== 팔로우 =====
